@@ -313,8 +313,12 @@
       <button data-shape="cylinder" title="Cylinder">⬛</button>
       <button data-shape="cone" title="Cone">🔺</button>
       <button data-shape="pyramid" title="Pyramid">🔻</button>
-      <button data-shape="torus" title="Torus">⭕</button>
-      <button data-shape="text" title="Text">🅰</button>
+      <button data-shape="torus" title="Donut">⭕</button>
+      <button data-shape="halfsphere" title="Half Sphere">◖</button>
+      <button data-shape="wedge" title="Wedge / Ramp">◢</button>
+      <button data-shape="prism" title="Triangular Prism">📐</button>
+      <button data-shape="star" title="Star">★</button>
+      <button data-shape="text" title="Text Block">🅰</button>
     </div>
 
     <div id="cam-bar">
@@ -386,6 +390,16 @@
         <div class="row"><label>Size</label><input type="range" id="uni-scale" min="0.2" max="3" step="0.01" value="1"></div>
       </div>
       <div class="grp">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">Position</div>
+        <div class="row"><label>X</label><input type="number" id="num-px" step="1" value="0" style="width:70px"></div>
+        <div class="row"><label>Y</label><input type="number" id="num-py" step="1" value="0" style="width:70px"></div>
+        <div class="row"><label>Z</label><input type="number" id="num-pz" step="1" value="0" style="width:70px"></div>
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin:8px 0 4px 0;">Width / Height / Depth</div>
+        <div class="row"><label>W</label><input type="number" id="num-sx" step="0.1" min="0.05" value="1" style="width:70px"></div>
+        <div class="row"><label>H</label><input type="number" id="num-sy" step="0.1" min="0.05" value="1" style="width:70px"></div>
+        <div class="row"><label>D</label><input type="number" id="num-sz" step="0.1" min="0.05" value="1" style="width:70px"></div>
+      </div>
+      <div class="grp">
         <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">Lighting</div>
         <div class="row"><label>Daylight</label><input type="range" id="lt-ambient" min="0" max="2" step="0.01" value="0.45"></div>
         <div class="row"><label>Sun</label><input type="range" id="lt-key" min="0" max="4" step="0.01" value="1.6"></div>
@@ -421,8 +435,20 @@
       <button id="btn-spin" class="primary">↻ Spin</button>
       <button id="btn-fit">⊕ Fit</button>
       <button id="btn-bg">◐ Preset</button>
-      <button id="btn-save" title="Save project to browser">💾 Save</button>
-      <button id="btn-load" title="Load saved project">📂 Load</button>
+      <button id="btn-duplicate" title="Duplicate selected (D)">⎘ Copy</button>
+      <button id="btn-mirror-x" title="Mirror across X axis">↔ MirrorX</button>
+      <button id="btn-mirror-y" title="Mirror across Y axis">↕ MirrorY</button>
+      <button id="btn-mirror-z" title="Mirror across Z axis">⤧ MirrorZ</button>
+      <button id="btn-snap" title="Snap to grid (5 unit)">⊞ Snap</button>
+      <button id="btn-delete" title="Delete selected (Del)">🗑 Delete</button>
+      <button id="btn-export-stl" title="Export full scene as printable STL">🖨 Print STL</button>
+      <select id="save-slot" title="Pick a save slot">
+        <option value="1">Slot 1</option>
+        <option value="2">Slot 2</option>
+        <option value="3">Slot 3</option>
+      </select>
+      <button id="btn-save" title="Save project to this slot">💾 Save</button>
+      <button id="btn-load" title="Load this slot">📂 Load</button>
       <button id="btn-export-project" title="Download as .kauvi.json">⬇ Project</button>
       <button id="btn-help" title="Quick start guide">❓ Help</button>
     </div>
@@ -1021,13 +1047,73 @@ function makePrimitive(kind, opts={}) {
   const c = opts.color || '#9aa4af';
   const s = opts.size || 20;
   switch (kind) {
-    case 'box':       geom = new THREE.BoxGeometry(s, s, s); break;
-    case 'sphere':    geom = new THREE.SphereGeometry(s/2, 24, 16); break;
-    case 'cylinder':  geom = new THREE.CylinderGeometry(s/2, s/2, s, 24); break;
-    case 'cone':      geom = new THREE.ConeGeometry(s/2, s, 24); break;
-    case 'pyramid':   geom = new THREE.ConeGeometry(s/Math.sqrt(2), s, 4); break;
-    case 'torus':     geom = new THREE.TorusGeometry(s/2, s/6, 16, 24); break;
-    case 'text':      geom = new THREE.BoxGeometry(s, s/3, s/4); break; // placeholder until font load
+    case 'box':        geom = new THREE.BoxGeometry(s, s, s); break;
+    case 'sphere':     geom = new THREE.SphereGeometry(s/2, 24, 16); break;
+    case 'cylinder':   geom = new THREE.CylinderGeometry(s/2, s/2, s, 24); break;
+    case 'cone':       geom = new THREE.ConeGeometry(s/2, s, 24); break;
+    case 'pyramid':    geom = new THREE.ConeGeometry(s/Math.sqrt(2), s, 4); break;
+    case 'torus':      geom = new THREE.TorusGeometry(s/2, s/6, 16, 24); break;
+    case 'halfsphere': geom = new THREE.SphereGeometry(s/2, 24, 12, 0, Math.PI*2, 0, Math.PI/2); break;
+    case 'wedge': {
+      // Right-angle wedge / ramp via custom BufferGeometry
+      const h = s, w = s, d = s;
+      const v = new Float32Array([
+        // 6 vertices of a wedge
+        0,0,0,   w,0,0,   w,0,d,
+        0,0,d,   0,h,0,   0,h,d,
+      ]);
+      const idx = [
+        0,1,2, 0,2,3,  // bottom
+        0,4,1,         // front-tri
+        1,4,5, 1,5,2,  // ramp (slope)
+        0,3,5, 0,5,4,  // left
+        2,5,3,         // back-tri
+      ];
+      geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(v, 3));
+      geom.setIndex(idx);
+      geom.computeVertexNormals();
+      geom.translate(-w/2, 0, -d/2);
+      break;
+    }
+    case 'prism': {
+      // Equilateral triangular prism along Z
+      const h = s, len = s, half = s/2;
+      const tip = h * Math.sqrt(3) / 2;
+      const v = new Float32Array([
+        -half, 0, -len/2,  half, 0, -len/2,  0, tip, -len/2,
+        -half, 0,  len/2,  half, 0,  len/2,  0, tip,  len/2,
+      ]);
+      const idx = [
+        0,1,2,             // back triangle
+        5,4,3,             // front triangle
+        0,3,4, 0,4,1,      // bottom
+        1,4,5, 1,5,2,      // right slope
+        2,5,3, 2,3,0,      // left slope
+      ];
+      geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(v, 3));
+      geom.setIndex(idx);
+      geom.computeVertexNormals();
+      geom.translate(0, -tip/2, 0);
+      break;
+    }
+    case 'star': {
+      // 5-pointed extruded star
+      const shape = new THREE.Shape();
+      const spikes = 5, outerR = s/2, innerR = s/5;
+      for (let i = 0; i < spikes*2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const a = (Math.PI / spikes) * i - Math.PI/2;
+        const x = Math.cos(a) * r, y = Math.sin(a) * r;
+        if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+      }
+      shape.closePath();
+      geom = new THREE.ExtrudeGeometry(shape, { depth: s/4, bevelEnabled: true, bevelThickness: s/40, bevelSize: s/40, bevelSegments: 2 });
+      geom.center();
+      break;
+    }
+    case 'text':       geom = new THREE.BoxGeometry(s, s/3, s/4); break;
     default: return null;
   }
   const material = new THREE.MeshStandardMaterial({
@@ -1273,6 +1359,273 @@ window.addEventListener('load', () => setTimeout(() => {
   rim.color = new THREE.Color(0x88ccff); ltRimColor.value = '#88ccff';
   if (ground) ground.material.opacity = 0.15;
 }, 100));
+
+
+// === V2: MULTI-SELECT, DUPLICATE, MIRROR, SNAP, SCENE EXPORT, SLOTS, NUMERIC INSPECTOR ===
+
+// Multi-select state. selectedObjects[0] is the "primary" (where the gizmo sits).
+const selectedObjects = [];
+function selectionClear() {
+  selectedObjects.forEach(o => { if (o.userData._selOutline) { scene.remove(o.userData._selOutline); o.userData._selOutline = null; }});
+  selectedObjects.length = 0;
+}
+function selectionAdd(obj, additive=false) {
+  if (!obj) return;
+  if (!additive) selectionClear();
+  if (selectedObjects.indexOf(obj) === -1) {
+    selectedObjects.push(obj);
+    // Visual outline: wrap in a slightly larger wireframe shell
+    try {
+      const outline = new THREE.Mesh(obj.geometry, new THREE.MeshBasicMaterial({ color: 0x39e1c4, wireframe: true, transparent: true, opacity: 0.55 }));
+      outline.position.copy(obj.position);
+      outline.rotation.copy(obj.rotation);
+      outline.scale.copy(obj.scale).multiplyScalar(1.04);
+      obj.userData._selOutline = outline;
+      scene.add(outline);
+    } catch (e) {}
+  }
+  // Attach gizmo to primary
+  const primary = selectedObjects[0];
+  if (primary) {
+    if (transformControls.object !== primary) {
+      if (transformControls.object) transformControls.detach();
+      transformControls.attach(primary);
+      transformControls.visible = true;
+      transformControls.enabled = true;
+    }
+  }
+  refreshInspector();
+}
+function refreshOutlines() {
+  selectedObjects.forEach(o => {
+    const out = o.userData._selOutline;
+    if (out) { out.position.copy(o.position); out.rotation.copy(o.rotation); out.scale.copy(o.scale).multiplyScalar(1.04); }
+  });
+}
+
+// Override pointerdown raycaster to honour Shift for multi-select
+renderer.domElement.addEventListener('pointerdown', (ev) => {
+  if (transformControls.dragging) return;
+  if (ev.button !== 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const candidates = [...sceneObjects];
+  if (mesh) candidates.push(mesh);
+  const hits = raycaster.intersectObjects(candidates, false);
+  if (hits.length > 0) {
+    selectionAdd(hits[0].object, ev.shiftKey);
+    setStatus((ev.shiftKey ? '+Selected ' : 'Selected ') + (hits[0].object.userData.name || 'mesh') + (selectedObjects.length > 1 ? ' (' + selectedObjects.length + ')' : ''), 900);
+  } else if (!ev.shiftKey) {
+    selectionClear();
+    refreshInspector();
+  }
+}, true);
+
+// Keep outlines glued to objects each frame
+const _origLoopFn = loop;
+(function patchLoopForOutlines() {
+  const baseRender = renderer.render.bind(renderer);
+  renderer.render = (sc, cam) => {
+    refreshOutlines();
+    baseRender(sc, cam);
+  };
+})();
+
+// Duplicate
+function duplicateSelection() {
+  if (selectedObjects.length === 0) { setStatus('Pick a shape first', 1200); return; }
+  const copies = [];
+  selectedObjects.slice().forEach(src => {
+    if (src === mesh) return; // skip the loaded STL master
+    const m = new THREE.Mesh(src.geometry.clone(), src.material.clone());
+    m.castShadow = true;
+    m.userData = { kind: src.userData.kind, name: (src.userData.kind || 'obj') + '_' + (sceneObjects.length + copies.length + 1) };
+    m.position.copy(src.position).add(new THREE.Vector3(12, 0, 0));
+    m.rotation.copy(src.rotation);
+    m.scale.copy(src.scale);
+    scene.add(m);
+    sceneObjects.push(m);
+    copies.push(m);
+  });
+  selectionClear();
+  copies.forEach((c, i) => selectionAdd(c, i > 0));
+  setStatus('Duplicated ' + copies.length, 1200);
+  pushHistory('Duplicate');
+}
+document.getElementById('btn-duplicate').addEventListener('click', duplicateSelection);
+
+// Mirror on axis: invert scale on that axis for each selection
+function mirrorSelection(axis) {
+  if (selectedObjects.length === 0) { setStatus('Pick a shape first', 1200); return; }
+  selectedObjects.forEach(o => {
+    if (axis === 'x') o.scale.x *= -1;
+    if (axis === 'y') o.scale.y *= -1;
+    if (axis === 'z') o.scale.z *= -1;
+  });
+  setStatus('Mirrored ' + axis.toUpperCase(), 1100);
+  pushHistory('Mirror ' + axis);
+  refreshInspector();
+}
+document.getElementById('btn-mirror-x').addEventListener('click', () => mirrorSelection('x'));
+document.getElementById('btn-mirror-y').addEventListener('click', () => mirrorSelection('y'));
+document.getElementById('btn-mirror-z').addEventListener('click', () => mirrorSelection('z'));
+
+// Snap to grid
+let snapOn = false;
+document.getElementById('btn-snap').addEventListener('click', () => {
+  snapOn = !snapOn;
+  transformControls.setTranslationSnap(snapOn ? 5 : null);
+  transformControls.setRotationSnap(snapOn ? THREE.MathUtils.degToRad(15) : null);
+  transformControls.setScaleSnap(snapOn ? 0.1 : null);
+  document.getElementById('btn-snap').classList.toggle('primary', snapOn);
+  setStatus(snapOn ? 'Snap ON (grid=5, 15°, 0.1)' : 'Snap OFF', 1200);
+});
+
+// Delete selected
+function deleteSelection() {
+  if (selectedObjects.length === 0) { setStatus('Nothing to delete', 1200); return; }
+  selectedObjects.slice().forEach(o => {
+    if (o === mesh) return; // never delete the loaded master
+    const idx = sceneObjects.indexOf(o);
+    if (idx !== -1) sceneObjects.splice(idx, 1);
+    if (o.userData._selOutline) scene.remove(o.userData._selOutline);
+    scene.remove(o);
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+  selectionClear();
+  if (transformControls.object) transformControls.detach();
+  setStatus('Deleted', 1100);
+  pushHistory('Delete');
+  refreshInspector();
+}
+document.getElementById('btn-delete').addEventListener('click', deleteSelection);
+
+// Scene STL export: merge ALL meshes (the loaded STL + all primitives) into one printable file
+document.getElementById('btn-export-stl').addEventListener('click', () => {
+  const group = new THREE.Group();
+  if (mesh) {
+    const m = new THREE.Mesh(mesh.geometry.clone(), mesh.material);
+    m.position.copy(mesh.position); m.rotation.copy(mesh.rotation); m.scale.copy(mesh.scale);
+    group.add(m);
+  }
+  sceneObjects.forEach(o => {
+    const m = new THREE.Mesh(o.geometry.clone(), o.material);
+    m.position.copy(o.position); m.rotation.copy(o.rotation); m.scale.copy(o.scale);
+    group.add(m);
+  });
+  if (group.children.length === 0) { setStatus('Nothing in scene to print', 1500); return; }
+  const binary = stlExporter.parse(group, { binary: true });
+  const blob = new Blob([binary], { type: 'model/stl' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'kauvi_scene_' + Date.now() + '.stl';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus('Printing ready! Downloaded ' + a.download, 2200);
+  pushHistory('Export scene STL');
+});
+
+// Save slots
+function slotKey() {
+  const n = (document.getElementById('save-slot') || {}).value || '1';
+  return 'kauvi-3d-studio-slot-' + n;
+}
+// Re-wire existing #btn-save and #btn-load to use the active slot
+const btnSave = document.getElementById('btn-save');
+const btnLoad = document.getElementById('btn-load');
+// Clear any previous listeners by replacing the node — preserve label & attributes
+function rewireSaveLoad() {
+  // Strip existing click handlers by cloning
+  const sNew = btnSave.cloneNode(true); btnSave.parentNode.replaceChild(sNew, btnSave);
+  const lNew = btnLoad.cloneNode(true); btnLoad.parentNode.replaceChild(lNew, btnLoad);
+  sNew.addEventListener('click', () => {
+    try {
+      const data = serializeScene();
+      localStorage.setItem(slotKey(), JSON.stringify(data));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      setStatus('Saved to ' + (document.getElementById('save-slot').value === '1' ? 'Slot 1' : 'Slot ' + document.getElementById('save-slot').value) + ' 💾', 1500);
+      pushHistory('Save slot ' + document.getElementById('save-slot').value);
+    } catch (e) { setStatus('Save failed: ' + e.message, 2200); }
+  });
+  lNew.addEventListener('click', () => {
+    try {
+      const raw = localStorage.getItem(slotKey()) || localStorage.getItem(STORAGE_KEY);
+      if (!raw) { setStatus('Slot empty — try Save first', 1800); return; }
+      applySnapshot(JSON.parse(raw));
+      setStatus('Loaded ' + (document.getElementById('save-slot').value === '1' ? 'Slot 1' : 'Slot ' + document.getElementById('save-slot').value) + ' 📂', 1500);
+      pushHistory('Load slot ' + document.getElementById('save-slot').value);
+    } catch (e) { setStatus('Load failed: ' + e.message, 2200); }
+  });
+}
+rewireSaveLoad();
+
+// Numeric inspector
+const numIds = ['num-px','num-py','num-pz','num-sx','num-sy','num-sz'];
+function refreshInspector() {
+  const t = selectedObjects[0];
+  numIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !t; });
+  if (!t) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (Math.round(v * 100) / 100); };
+  set('num-px', t.position.x); set('num-py', t.position.y); set('num-pz', t.position.z);
+  set('num-sx', t.scale.x); set('num-sy', t.scale.y); set('num-sz', t.scale.z);
+}
+function applyNumericPos() {
+  const t = selectedObjects[0]; if (!t) return;
+  t.position.set(
+    parseFloat(document.getElementById('num-px').value) || 0,
+    parseFloat(document.getElementById('num-py').value) || 0,
+    parseFloat(document.getElementById('num-pz').value) || 0,
+  );
+}
+function applyNumericScale() {
+  const t = selectedObjects[0]; if (!t) return;
+  const sx = parseFloat(document.getElementById('num-sx').value);
+  const sy = parseFloat(document.getElementById('num-sy').value);
+  const sz = parseFloat(document.getElementById('num-sz').value);
+  if (sx) t.scale.x = sx;
+  if (sy) t.scale.y = sy;
+  if (sz) t.scale.z = sz;
+}
+['num-px','num-py','num-pz'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => { applyNumericPos(); pushHistory('Set position'); });
+});
+['num-sx','num-sy','num-sz'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => { applyNumericScale(); pushHistory('Set size'); });
+});
+transformControls.addEventListener('objectChange', refreshInspector);
+
+// Keep shape-palette click handler also drive selection (so newly added object gets outline)
+document.querySelectorAll('#shape-palette button').forEach(b => {
+  // Wrap existing add: when a primitive is added it's already attached to gizmo;
+  // additionally register it in the selection state so multi-select features work.
+  b.addEventListener('click', () => {
+    setTimeout(() => {
+      const last = sceneObjects[sceneObjects.length - 1];
+      if (last && transformControls.object === last) {
+        selectionClear();
+        selectionAdd(last, false);
+      }
+    }, 0);
+  });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.target && e.target.matches('input,textarea,select')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'd' && !(e.metaKey || e.ctrlKey)) { e.preventDefault(); duplicateSelection(); }
+  else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelection(); }
+  else if (k === 'm') { e.preventDefault(); mirrorSelection('x'); }
+  else if (k === 'g') { e.preventDefault(); document.getElementById('btn-snap').click(); }
+});
+
+// Init inspector
+refreshInspector();
 
 </script>
 </body>
