@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>Kauvi Cyborg Scorpion · 3D Viewer</title>
+<style>
+  :root {
+    --bg:#0b0d10;
+    --panel:#11151a;
+    --accent:#39e1c4;
+    --accent2:#7c5cff;
+    --text:#e6ecf2;
+    --muted:#7d8995;
+    --line:#1c232a;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html, body {
+    margin:0; padding:0;
+    background: radial-gradient(ellipse at 30% 0%, #11161d 0%, #0b0d10 60%);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    height: 100%;
+    overflow:hidden;
+  }
+  #app { position:fixed; inset:0; display:flex; flex-direction:column; }
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: env(safe-area-inset-top, 8px) 14px 8px 14px;
+    background:linear-gradient(180deg, rgba(11,13,16,0.95), rgba(11,13,16,0.7) 70%, rgba(11,13,16,0));
+    z-index:10;
+  }
+  header h1 {
+    margin:0;
+    font-size:15px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text);
+    font-weight:600;
+  }
+  header h1 span {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header .badge {
+    font-size: 11px;
+    color: var(--muted);
+    border:1px solid var(--line);
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  canvas { display:block; touch-action: none; }
+  #stage {
+    flex:1; position:relative; overflow:hidden;
+  }
+  #stage canvas { width:100%; height:100%; display:block; }
+  #dropzone {
+    position:absolute; inset:0;
+    border:2px dashed transparent;
+    pointer-events:none;
+    transition: border-color 120ms ease;
+  }
+  #dropzone.over {
+    border-color:var(--accent);
+    background: rgba(57, 225, 196, 0.05);
+  }
+  #toolbar {
+    position:absolute;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    left: 50%; transform:translateX(-50%);
+    display:flex; gap:6px;
+    padding:6px;
+    background: rgba(17, 21, 26, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border:1px solid var(--line);
+    border-radius:14px;
+    z-index:5;
+    max-width: calc(100vw - 24px);
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #toolbar button, #toolbar label {
+    appearance:none;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select:none;
+    transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  }
+  #toolbar button:active, #toolbar label:active {
+    background:#1a2129;
+  }
+  #toolbar button.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #toolbar input[type="file"] { display:none; }
+  #info {
+    position:absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    right: 14px;
+    background: rgba(17, 21, 26, 0.85);
+    backdrop-filter: blur(8px);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:8px 12px;
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.5;
+    max-width: 240px;
+    z-index:4;
+  }
+  #info b { color: var(--text); font-weight:600; }
+  #status {
+    position:absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    left: 14px;
+    background: rgba(17, 21, 26, 0.85);
+    backdrop-filter: blur(8px);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:8px 12px;
+    font-size:12px;
+    color:var(--accent);
+    z-index:4;
+    opacity:0;
+    transition: opacity 200ms ease;
+  }
+  #status.show { opacity:1; }
+  @media (max-width: 480px) {
+    #info { display:none; }
+    header h1 { font-size:13px; }
+    #toolbar { gap:4px; padding:4px; border-radius:12px; }
+    #toolbar button, #toolbar label { padding:8px 10px; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span>KAUVI</span> · CYBORG SCORPION</h1>
+    <div class="badge" id="tri-count">— tris</div>
+  </header>
+  <div id="stage">
+    <div id="dropzone"></div>
+    <div id="info">
+      <b>Drag</b> a 1-finger touch or mouse to rotate.<br>
+      <b>Pinch</b> or scroll to zoom. <b>Two-finger drag</b> to pan.<br>
+      <b>Drop</b> an .stl file anywhere to load it.
+    </div>
+    <div id="status"></div>
+    <div id="toolbar">
+      <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
+      <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
+      <button id="btn-reset">↺ Reset</button>
+      <button id="btn-wire">▒ Wireframe</button>
+      <button id="btn-spin" class="primary">↻ Spin</button>
+      <button id="btn-fit">⊕ Fit</button>
+      <button id="btn-bg">◐ Bg</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+const stage = document.getElementById('stage');
+const dropzone = document.getElementById('dropzone');
+const statusEl = document.getElementById('status');
+const triCount = document.getElementById('tri-count');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const bgPalette = [
+  { col: 0x0b0d10, fog: 0x0b0d10 },
+  { col: 0x111827, fog: 0x111827 },
+  { col: 0x1a1530, fog: 0x1a1530 },
+  { col: 0xeef2f5, fog: 0xeef2f5 },
+];
+let bgIdx = 0;
+function applyBg() {
+  scene.background = new THREE.Color(bgPalette[bgIdx].col);
+  scene.fog = new THREE.Fog(bgPalette[bgIdx].fog, 400, 1400);
+  const lightBg = bgIdx === 3;
+  mat.color = new THREE.Color(lightBg ? 0x2a4a55 : 0x9aa4af);
+  mat.metalness = lightBg ? 0.5 : 0.85;
+  mat.roughness = lightBg ? 0.35 : 0.28;
+  mat.emissive = new THREE.Color(lightBg ? 0x114a44 : 0x0a3a35);
+  mat.emissiveIntensity = lightBg ? 0.15 : 0.35;
+  if (ground) ground.material.opacity = lightBg ? 0.15 : 0.35;
+}
+applyBg.bg = bgPalette[bgIdx];
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 5000);
+camera.position.set(180, -260, 160);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 30;
+controls.maxDistance = 1200;
+controls.target.set(0, 10, 18);
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+// Lights
+const hemi = new THREE.HemisphereLight(0xb0c4d6, 0x14181c, 0.45);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(120, 200, 220);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 10; key.shadow.camera.far = 800;
+key.shadow.camera.left = -160; key.shadow.camera.right = 160;
+key.shadow.camera.top = 160; key.shadow.camera.bottom = -160;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0x39e1c4, 0.7);
+rim.position.set(-180, -60, 140);
+scene.add(rim);
+
+const accent = new THREE.PointLight(0x7c5cff, 0.6, 600);
+accent.position.set(-60, -120, 80);
+scene.add(accent);
+
+// Ground
+let ground = null;
+function addGround() {
+  const g = new THREE.CircleGeometry(420, 64);
+  const m = new THREE.MeshStandardMaterial({
+    color: 0x0a0d12, metalness: 0.0, roughness: 0.95,
+    transparent: true, opacity: 0.35,
+  });
+  ground = new THREE.Mesh(g, m);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -40;
+  ground.receiveShadow = true;
+  scene.add(ground);
+}
+addGround();
+
+// Material for STL model
+const mat = new THREE.MeshStandardMaterial({
+  color: 0x9aa4af,
+  metalness: 0.85,
+  roughness: 0.28,
+  emissive: 0x0a3a35,
+  emissiveIntensity: 0.35,
+  flatShading: false,
+});
+
+// Model holder
+let mesh = null;
+let spinning = false;
+let wireframe = false;
+
+function setStatus(text, holdMs=1800) {
+  statusEl.textContent = text;
+  statusEl.classList.add('show');
+  if (setStatus._t) clearTimeout(setStatus._t);
+  if (holdMs) setStatus._t = setTimeout(()=>statusEl.classList.remove('show'), holdMs);
+}
+
+function loadFromArrayBuffer(buf, label='model') {
+  const loader = new STLLoader();
+  let geom;
+  try { geom = loader.parse(buf); }
+  catch (e) { setStatus('Failed to parse STL: ' + e.message); return; }
+  geom.computeVertexNormals();
+  geom.center();
+  geom.computeBoundingSphere();
+  const r = geom.boundingSphere.radius;
+
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  mesh = new THREE.Mesh(geom, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  // Orient: scorpion model is +Y forward. Rotate so +Y is forward in screen, +Z up.
+  // Default three: +Y up, -Z forward. Our model has +Z up, so rotate -X 90°.
+  mesh.rotation.x = -Math.PI / 2;
+  scene.add(mesh);
+
+  // Reposition ground at bottom of bounding box
+  const bbox = new THREE.Box3().setFromObject(mesh);
+  if (ground) ground.position.y = bbox.min.y - 1.5;
+
+  // Camera framing
+  const dist = r * 3.0;
+  camera.position.set(dist*0.6, dist*0.55, dist*0.85);
+  controls.target.set(0, 0, 0);
+  controls.update();
+
+  triCount.textContent = (geom.attributes.position.count / 3 | 0).toLocaleString() + ' tris · ' + label;
+  setStatus('Loaded ' + label);
+}
+
+async function loadFromUrl(url, label) {
+  setStatus('Loading ' + (label||url) + '...', 6000);
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const buf = await resp.arrayBuffer();
+    loadFromArrayBuffer(buf, label || url.split('/').pop());
+  } catch (e) {
+    setStatus('Load failed: ' + e.message, 4000);
+  }
+}
+
+// File input
+document.getElementById('fileinput').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => loadFromArrayBuffer(ev.target.result, f.name);
+  r.readAsArrayBuffer(f);
+});
+
+// Drag and drop
+['dragenter','dragover'].forEach(t => {
+  window.addEventListener(t, e => { e.preventDefault(); dropzone.classList.add('over'); });
+});
+['dragleave','drop'].forEach(t => {
+  window.addEventListener(t, e => { e.preventDefault(); dropzone.classList.remove('over'); });
+});
+window.addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => loadFromArrayBuffer(ev.target.result, f.name);
+  r.readAsArrayBuffer(f);
+});
+
+// Toolbar
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  if (!mesh) return;
+  const bs = mesh.geometry.boundingSphere;
+  const r = bs ? bs.radius : 100;
+  const dist = r * 3.0;
+  camera.position.set(dist*0.6, dist*0.55, dist*0.85);
+  controls.target.set(0,0,0);
+  controls.update();
+});
+document.getElementById('btn-wire').addEventListener('click', ()=>{
+  wireframe = !wireframe;
+  mat.wireframe = wireframe;
+});
+document.getElementById('btn-spin').addEventListener('click', e=>{
+  spinning = !spinning;
+  e.currentTarget.classList.toggle('primary', spinning);
+});
+document.getElementById('btn-fit').addEventListener('click', ()=>{
+  if (!mesh) return;
+  controls.target.set(0,0,0);
+  const r = mesh.geometry.boundingSphere.radius;
+  const fov = camera.fov * Math.PI / 180;
+  const dist = r / Math.sin(fov/2) * 0.65;
+  camera.position.copy(controls.target.clone().add(new THREE.Vector3(0.6,0.55,0.85).normalize().multiplyScalar(dist)));
+  controls.update();
+});
+document.getElementById('btn-bg').addEventListener('click', ()=>{
+  bgIdx = (bgIdx + 1) % bgPalette.length;
+  applyBg();
+});
+
+// Resize
+function resize() {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+resize();
+
+// Render loop
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = clock.getDelta();
+  if (spinning && mesh) mesh.rotation.z += dt * 0.5;
+  controls.update();
+  renderer.render(scene, camera);
+}
+applyBg();
+loop();
+
+// Preload scorpion
+loadFromUrl('kauvi_scorpion.stl', 'KAUVI scorpion');
+</script>
+</body>
+</html>
