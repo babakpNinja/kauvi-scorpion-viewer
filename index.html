@@ -3531,23 +3531,26 @@ window.executeCommands = function(plan) {
   }
   @media (max-width: 900px) {
     #app {
-      grid-template-columns: 0px 1fr 0px !important;
+      grid-template-columns: 1fr !important;
       grid-template-areas:
-        "header header header"
-        "stage  stage  stage"
-        "tools  tools  tools" !important;
+        "header"
+        "stage"
+        "tools" !important;
     }
     #left-sidebar, #right-sidebar {
-      position: fixed;
+      display: none !important;
+      position: fixed !important;
       top: 52px; bottom: 60px;
-      width: 260px;
-      box-shadow: 0 0 30px rgba(0,0,0,0.22);
-      background: rgba(248,250,253,0.99);
+      width: 280px !important;
+      max-width: 85vw !important;
+      box-shadow: 0 0 30px rgba(0,0,0,0.25);
+      background: rgba(248,250,253,0.99) !important;
+      z-index: 20 !important;
     }
-    #left-sidebar { left: -270px; transition: left 200ms ease; }
-    #right-sidebar { right: -270px; transition: right 200ms ease; }
-    #app.left-open #left-sidebar { left: 0; }
-    #app.right-open #right-sidebar { right: 0; }
+    #left-sidebar { left: 0; }
+    #right-sidebar { right: 0; }
+    #app.left-open #left-sidebar { display: flex !important; }
+    #app.right-open #right-sidebar { display: flex !important; }
     #left-collapse, #right-collapse { display: none !important; }
     #left-mobile-toggle, #right-mobile-toggle { display: inline-block !important; }
     body header { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 8px !important; }
