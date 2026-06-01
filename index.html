@@ -3614,6 +3614,12 @@ window.executeCommands = function(plan) {
 (function setupV8Layout() {
   const app = document.getElementById('app');
   if (!app) return;
+  // CRITICAL: move sidebars INSIDE #app so grid-template-areas applies to them
+  const ls = document.getElementById('left-sidebar');
+  const rs = document.getElementById('right-sidebar');
+  const stage = document.getElementById('stage');
+  if (ls && stage) app.insertBefore(ls, stage);
+  if (rs && stage) app.insertBefore(rs, stage.nextSibling);
   const moves = [
     ['shape-palette', 'left-shapes-slot'],
     ['color-chips', 'left-colors-slot'],
