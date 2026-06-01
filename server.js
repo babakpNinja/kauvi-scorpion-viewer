@@ -133,8 +133,7 @@ app.post('/api/image', async (req, res) => {
         prompt: wrapped,
         n: 1,
         size,
-        quality: 'standard',
-        response_format: 'url'
+        quality: 'standard'
       })
     });
     if (!resp.ok) {
@@ -143,8 +142,10 @@ app.post('/api/image', async (req, res) => {
       return res.status(502).json({ ok: false, error: 'openai_api_error', status: resp.status, detail: errText.slice(0, 400) });
     }
     const data = await resp.json();
-    const url = data?.data?.[0]?.url;
-    const revisedPrompt = data?.data?.[0]?.revised_prompt;
+    const item = data?.data?.[0] || {};
+    let url = item.url;
+    if (!url && item.b64_json) url = 'data:image/png;base64,' + item.b64_json;
+    const revisedPrompt = item.revised_prompt;
     if (!url) return res.status(502).json({ ok: false, error: 'no_url_in_response', raw: data });
     res.json({ ok: true, url, prompt: userPrompt, revisedPrompt });
   } catch (e) {
