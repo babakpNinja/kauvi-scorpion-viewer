@@ -223,6 +223,21 @@
       <div class="grp">
         <div class="row"><label>Uniform</label><input type="range" id="uni-scale" min="0.2" max="3" step="0.01" value="1"></div>
       </div>
+      <div class="grp">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">Lighting</div>
+        <div class="row"><label>Ambient</label><input type="range" id="lt-ambient" min="0" max="2" step="0.01" value="0.45"></div>
+        <div class="row"><label>Key</label><input type="range" id="lt-key" min="0" max="4" step="0.01" value="1.6"></div>
+        <div class="row"><label>Key clr</label><input type="color" id="lt-key-color" value="#ffffff"></div>
+        <div class="row"><label>Rim</label><input type="range" id="lt-rim" min="0" max="3" step="0.01" value="0.7"></div>
+        <div class="row"><label>Rim clr</label><input type="color" id="lt-rim-color" value="#39e1c4"></div>
+        <div class="row"><label>Bg</label><input type="color" id="lt-bg-color" value="#0b0d10"></div>
+        <div class="mode-btns" id="lt-presets" style="margin-top:6px;">
+          <button data-preset="studio">Studio</button>
+          <button data-preset="showroom">Showroom</button>
+          <button data-preset="workshop">Workshop</button>
+          <button data-preset="cyborg">Cyborg</button>
+        </div>
+      </div>
       <div class="apply-row">
         <button id="btn-bake" class="primary" title="Bake transform into geometry so Download includes the edit">Apply</button>
         <button id="btn-undo" title="Revert to original loaded mesh">Reset</button>
@@ -568,6 +583,53 @@ document.getElementById('btn-bake').addEventListener('click', ()=>{
   uniScale.value = 1;
   triCount.textContent = (g.attributes.position.count / 3 | 0).toLocaleString() + ' tris · ' + currentName + ' (edited)';
   setStatus('Baked. Download now exports the edit.', 2000);
+});
+
+// === LIGHTING CONTROLS ===
+const ltAmbient = document.getElementById('lt-ambient');
+const ltKey = document.getElementById('lt-key');
+const ltKeyColor = document.getElementById('lt-key-color');
+const ltRim = document.getElementById('lt-rim');
+const ltRimColor = document.getElementById('lt-rim-color');
+const ltBgColor = document.getElementById('lt-bg-color');
+
+ltAmbient.addEventListener('input', e => hemi.intensity = +e.target.value);
+ltKey.addEventListener('input', e => key.intensity = +e.target.value);
+ltKeyColor.addEventListener('input', e => key.color = new THREE.Color(e.target.value));
+ltRim.addEventListener('input', e => rim.intensity = +e.target.value);
+ltRimColor.addEventListener('input', e => rim.color = new THREE.Color(e.target.value));
+ltBgColor.addEventListener('input', e => {
+  const c = new THREE.Color(e.target.value);
+  scene.background = c;
+  scene.fog = new THREE.Fog(c.getHex(), 400, 1400);
+});
+
+const lightingPresets = {
+  studio:   { ambient:0.45, key:1.6,  keyCol:'#ffffff', rim:0.7, rimCol:'#39e1c4', bg:'#0b0d10', matCol:'#9aa4af', metal:0.85, rough:0.28, emiss:0.35, emissCol:'#0a3a35' },
+  showroom: { ambient:0.95, key:2.4,  keyCol:'#ffffff', rim:0.4, rimCol:'#88ccff', bg:'#eef2f5', matCol:'#2a4a55', metal:0.55, rough:0.35, emiss:0.05, emissCol:'#000000' },
+  workshop: { ambient:0.55, key:1.8,  keyCol:'#ffd9a0', rim:0.9, rimCol:'#ff9a55', bg:'#1a1310', matCol:'#b08a55', metal:0.7,  rough:0.45, emiss:0.2,  emissCol:'#3a2010' },
+  cyborg:   { ambient:0.35, key:1.4,  keyCol:'#a4d8ff', rim:1.4, rimCol:'#c850ff', bg:'#1a0d28', matCol:'#3a5a7a', metal:0.95, rough:0.18, emiss:0.5,  emissCol:'#3a5fff' },
+};
+document.querySelectorAll('#lt-presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = lightingPresets[btn.dataset.preset];
+    if (!p) return;
+    hemi.intensity = p.ambient;       ltAmbient.value = p.ambient;
+    key.intensity  = p.key;           ltKey.value = p.key;
+    key.color = new THREE.Color(p.keyCol); ltKeyColor.value = p.keyCol;
+    rim.intensity  = p.rim;           ltRim.value = p.rim;
+    rim.color = new THREE.Color(p.rimCol); ltRimColor.value = p.rimCol;
+    const bc = new THREE.Color(p.bg);
+    scene.background = bc; scene.fog = new THREE.Fog(bc.getHex(), 400, 1400);
+    ltBgColor.value = p.bg;
+    if (ground) ground.material.opacity = p.bg === '#eef2f5' ? 0.15 : 0.35;
+    mat.color = new THREE.Color(p.matCol); matColor.value = p.matCol;
+    mat.metalness = p.metal; matMetal.value = p.metal;
+    mat.roughness = p.rough; matRough.value = p.rough;
+    mat.emissiveIntensity = p.emiss; matEmiss.value = p.emiss;
+    mat.emissive = new THREE.Color(p.emissCol); matEmissColor.value = p.emissCol;
+    setStatus('Preset: ' + btn.dataset.preset, 1500);
+  });
 });
 
 // Reset: restore pristine geometry + default material values + identity transform
