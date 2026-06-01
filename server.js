@@ -37,6 +37,7 @@ Valid command actions:
 - {"action":"clear"}
 - {"action":"setBackground", "color":"#hex"}
 - {"action":"color", "color":"#hex"}
+- {"action":"showImage", "prompt":"<short description for the artist>"}  — use when the kid asks for a "reference", "picture of", "what does X look like", or seems to want visual inspiration before building.
 
 Valid shape kinds: box, sphere, cylinder, cone, pyramid, torus, halfsphere, wedge, prism, star.
 
@@ -105,6 +106,49 @@ app.post('/api/chat', async (req, res) => {
     res.json({ ok: true, plan, usage: data?.usage });
   } catch (e) {
     console.error('chat err', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// === Image generation (DALL-E 3) ===
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+app.post('/api/image', async (req, res) => {
+  if (!OPENAI_KEY) {
+    return res.status(500).json({ ok: false, error: 'OPENAI_API_KEY not set' });
+  }
+  const userPrompt = String(req.body?.prompt || '').slice(0, 400).trim();
+  if (!userPrompt) return res.status(400).json({ ok: false, error: 'prompt required' });
+  const size = ['1024x1024', '1792x1024', '1024x1792'].includes(req.body?.size) ? req.body.size : '1024x1024';
+  const wrapped = 'A simple, kid-friendly, brightly colored 3D-printable model of: ' + userPrompt + '. Clean studio lighting, white background, isometric angle, clear shapes, no text labels.';
+  console.log(new Date().toISOString(), 'image:', userPrompt.slice(0, 80));
+  try {
+    const resp = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ' + OPENAI_KEY
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: wrapped,
+        n: 1,
+        size,
+        quality: 'standard',
+        response_format: 'url'
+      })
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('openai image error', resp.status, errText.slice(0, 200));
+      return res.status(502).json({ ok: false, error: 'openai_api_error', status: resp.status, detail: errText.slice(0, 400) });
+    }
+    const data = await resp.json();
+    const url = data?.data?.[0]?.url;
+    const revisedPrompt = data?.data?.[0]?.revised_prompt;
+    if (!url) return res.status(502).json({ ok: false, error: 'no_url_in_response', raw: data });
+    res.json({ ok: true, url, prompt: userPrompt, revisedPrompt });
+  } catch (e) {
+    console.error('image err', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });

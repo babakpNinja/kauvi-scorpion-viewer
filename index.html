@@ -495,6 +495,83 @@
     #ai-launcher { bottom: 80px; right: 8px; padding: 10px 14px; font-size: 13px; }
     #ai-chat-panel { bottom: 80px; right: 8px; left: 8px; width: auto; height: 60vh; }
   }
+  /* === v6: Reference Image panel === */
+  #ref-launcher {
+    position: fixed;
+    bottom: 86px; right: 90px;
+    z-index: 12;
+    background: linear-gradient(135deg, #f97316, #ec4899);
+    color: white;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    animation: aiPulse 2.4s ease-in-out infinite;
+    animation-delay: 1.2s;
+  }
+  #ref-launcher:active { transform: scale(0.96); }
+  #ref-panel {
+    position: fixed;
+    top: 240px; right: 14px;
+    z-index: 13;
+    width: 300px; max-width: calc(100vw - 28px);
+    background: rgba(255,255,255,0.98);
+    border: 1px solid #d0d6dd;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #ref-panel.show { display: flex; }
+  #ref-header {
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #f97316, #ec4899);
+    color: white;
+    font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #ref-header button {
+    background: rgba(255,255,255,0.2); border: none; color: white;
+    width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 13px;
+  }
+  #ref-body {
+    padding: 10px;
+    background: #fafbfc;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  #ref-image-wrap {
+    aspect-ratio: 1 / 1;
+    background: #f0f3f6;
+    border: 1px dashed #d0d6dd;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7280; font-size: 12px; text-align: center; padding: 8px;
+    overflow: hidden;
+  }
+  #ref-image-wrap img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+  #ref-image-wrap.loading { color: #7c5cff; font-style: italic; }
+  #ref-input-row { display: flex; gap: 4px; }
+  #ref-input {
+    flex: 1; padding: 6px 8px; font-size: 12px;
+    border: 1px solid #d0d6dd; border-radius: 7px; background: white;
+  }
+  #ref-input:focus { outline: 2px solid #f97316; outline-offset: -1px; border-color: transparent; }
+  #ref-gen {
+    background: linear-gradient(135deg, #f97316, #ec4899); color: white;
+    border: none; padding: 0 10px; border-radius: 7px;
+    font-weight: 700; cursor: pointer; font-size: 12px;
+  }
+  #ref-gen:disabled { opacity: 0.5; cursor: wait; }
+  #ref-prompt-shown { font-size: 10px; color: #6b7280; font-style: italic; max-height: 32px; overflow: hidden; }
+  @media (max-width: 640px) {
+    #ref-launcher { bottom: 80px; right: 90px; padding: 9px 13px; font-size: 12px; }
+    #ref-panel { top: auto; bottom: 150px; right: 8px; left: 8px; width: auto; }
+  }
   .kid-close { position:absolute; top:10px; right:14px; background:transparent; border:0; font-size:28px; color:#666; cursor:pointer; }
   .kid-steps { display:flex; flex-direction:column; gap:14px; margin:12px 0 18px 0; }
   .kid-step { display:flex; gap:14px; align-items:flex-start; }
@@ -574,6 +651,21 @@
       <div id="objects-list"></div>
     </div>
     <button id="ai-launcher" title="Ask AI to build something">🤖 AI</button>
+    <button id="ref-launcher" title="Generate reference image (DALL-E 3)">📸 Reference</button>
+    <div id="ref-panel" role="dialog">
+      <div id="ref-header">
+        <div>📸 Reference Image</div>
+        <button id="ref-close" title="Close">×</button>
+      </div>
+      <div id="ref-body">
+        <div id="ref-image-wrap">Type a prompt below to get a reference image.</div>
+        <div id="ref-prompt-shown"></div>
+        <div id="ref-input-row">
+          <input id="ref-input" type="text" placeholder='e.g., "a friendly dragon"' maxlength="200">
+          <button id="ref-gen">🎨 Make</button>
+        </div>
+      </div>
+    </div>
     <div id="ai-chat-panel" role="dialog" aria-labelledby="ai-chat-title">
       <div id="ai-chat-header">
         <div>
@@ -2457,6 +2549,10 @@ function executeCommands(plan) {
       } else if (cmd.action === 'color' && cmd.color) {
         const t = selectedObjects[0] || mesh;
         if (t && t.material) { t.material.color = new THREE.Color(cmd.color); n++; }
+      } else if (cmd.action === 'showImage' && cmd.prompt) {
+        openRefPanel();
+        generateRefImage(cmd.prompt);
+        n++;
       }
     } catch (e) {
       console.error('cmd err', cmd, e);
@@ -2529,6 +2625,75 @@ aiInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDef
 document.querySelectorAll('#ai-chat-examples button').forEach(b => {
   b.addEventListener('click', () => { aiInput.value = b.dataset.ex; sendAI(); });
 });
+
+
+// === V6: REFERENCE IMAGE PANEL (DALL-E 3 via /api/image) ===
+const refLauncher = document.getElementById('ref-launcher');
+const refPanel = document.getElementById('ref-panel');
+const refClose = document.getElementById('ref-close');
+const refImageWrap = document.getElementById('ref-image-wrap');
+const refInput = document.getElementById('ref-input');
+const refGen = document.getElementById('ref-gen');
+const refPromptShown = document.getElementById('ref-prompt-shown');
+const REF_KEY = 'kauvi-ref-image';
+
+function openRefPanel() { refPanel.classList.add('show'); refLauncher.style.display = 'none'; setTimeout(() => refInput.focus(), 100); }
+function closeRefPanel() { refPanel.classList.remove('show'); refLauncher.style.display = ''; }
+refLauncher.addEventListener('click', openRefPanel);
+refClose.addEventListener('click', closeRefPanel);
+
+function loadLastRef() {
+  try {
+    const raw = localStorage.getItem(REF_KEY);
+    if (!raw) return;
+    const { url, prompt } = JSON.parse(raw);
+    if (url) {
+      refImageWrap.innerHTML = '<img src="' + url + '" alt="reference">';
+      refPromptShown.textContent = prompt ? '"' + prompt + '"' : '';
+    }
+  } catch(e) {}
+}
+loadLastRef();
+
+async function generateRefImage(prompt) {
+  if (!prompt) return;
+  refGen.disabled = true;
+  refImageWrap.classList.add('loading');
+  refImageWrap.innerHTML = '🎨 Drawing... (takes 10-15 sec)';
+  refPromptShown.textContent = '"' + prompt + '"';
+  try {
+    const resp = await fetch('/api/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      refImageWrap.classList.remove('loading');
+      refImageWrap.innerHTML = '⚠ ' + (data.error || 'failed') + (data.detail ? '<br><small>' + String(data.detail).slice(0,150) + '</small>' : '');
+      return;
+    }
+    refImageWrap.classList.remove('loading');
+    refImageWrap.innerHTML = '<img src="' + data.url + '" alt="reference">';
+    try { localStorage.setItem(REF_KEY, JSON.stringify({ url: data.url, prompt: data.prompt })); } catch(e) {}
+    setStatus('Reference image ready 📸', 1500);
+    beepClick();
+  } catch (e) {
+    refImageWrap.classList.remove('loading');
+    refImageWrap.innerHTML = '⚠ Network error: ' + e.message;
+  } finally {
+    refGen.disabled = false;
+  }
+}
+
+function submitRef() {
+  const text = refInput.value.trim();
+  if (!text) return;
+  refInput.value = '';
+  generateRefImage(text);
+}
+refGen.addEventListener('click', submitRef);
+refInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitRef(); }});
 
 </script>
 </body>
