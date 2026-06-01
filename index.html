@@ -18,7 +18,8 @@
   *,*::before,*::after { box-sizing:border-box; }
   html, body {
     margin:0; padding:0;
-    background: radial-gradient(ellipse at 30% 0%, #11161d 0%, #0b0d10 60%);
+    background: radial-gradient(ellipse at 30% 0%, #f8fafd 0%, #e6ecf2 60%);
+    color:#0b0d10;
     color:var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
     overscroll-behavior: none;
@@ -240,6 +241,55 @@
   /* If edit panel is shown, push cam-bar down */
   #edit-panel.show ~ #cam-bar { display:none; }
 
+  .kid-modal {
+    position:absolute; inset:0; background: rgba(0,0,0,0.55);
+    display:none; align-items:center; justify-content:center; z-index:50;
+    padding:20px;
+  }
+  .kid-modal.show { display:flex; }
+  .kid-modal-inner {
+    background: #fff; color:#0b0d10;
+    border-radius:18px; padding:28px;
+    max-width:520px; width:100%;
+    max-height: 86vh; overflow-y:auto;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+    font-family: inherit; position:relative;
+  }
+  .kid-modal-inner h2 { margin:0 0 14px 0; font-size:22px; color:#0b0d10; }
+  .kid-close { position:absolute; top:10px; right:14px; background:transparent; border:0; font-size:28px; color:#666; cursor:pointer; }
+  .kid-steps { display:flex; flex-direction:column; gap:14px; margin:12px 0 18px 0; }
+  .kid-step { display:flex; gap:14px; align-items:flex-start; }
+  .kid-step .num {
+    flex: 0 0 36px; height:36px; line-height:36px; text-align:center;
+    background:linear-gradient(135deg, #39e1c4, #7c5cff); color:white;
+    border-radius:50%; font-weight:700; font-size:18px;
+  }
+  .kid-step b { font-size:15px; color:#0b0d10; }
+  .kid-step div { font-size:13px; color:#3a4654; line-height:1.5; }
+  .kid-go {
+    width:100%; padding:14px; font-size:16px; font-weight:600;
+    background: linear-gradient(135deg, #39e1c4, #7c5cff); color:white;
+    border:0; border-radius:12px; cursor:pointer;
+  }
+  #color-chips {
+    position:absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+    left: 50%; transform:translateX(-50%);
+    display:flex; gap:8px; padding:8px 12px;
+    background: rgba(17,21,26,0.85); backdrop-filter: blur(10px);
+    border:1px solid var(--line); border-radius:24px;
+    z-index:5;
+  }
+  #color-chips button {
+    width:28px; height:28px; border-radius:50%; border:2px solid white;
+    cursor:pointer; padding:0; box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    transition: transform 100ms ease;
+  }
+  #color-chips button:hover { transform: scale(1.15); }
+  @media (max-width: 480px) {
+    #color-chips { gap:6px; padding:6px 8px; }
+    #color-chips button { width:24px; height:24px; }
+  }
+
   @media (max-width: 480px) {
     #info { display:none; }
     header h1 { font-size:13px; }
@@ -276,11 +326,40 @@
     </div>
 
     <div id="info">
-      <b>Drag</b> a 1-finger touch or mouse to rotate.<br>
-      <b>Pinch</b> or scroll to zoom. <b>Two-finger drag</b> to pan.<br>
-      <b>Drop</b> an .stl file anywhere to load it.
+      <b>👋 Hi! Try these:</b><br>
+      <b>1.</b> Click a shape on the left to add it<br>
+      <b>2.</b> Drag the arrows to move it around<br>
+      <b>3.</b> Pick colors at the bottom<br>
+      <span style="color:var(--accent)">Need help? Tap the ? button</span>
     </div>
     <div id="status"></div>
+    <div id="help-dialog" class="kid-modal">
+      <div class="kid-modal-inner">
+        <button class="kid-close" data-close>×</button>
+        <h2>🎨 How to use Kauvi 3D Studio</h2>
+        <div class="kid-steps">
+          <div class="kid-step"><span class="num">1</span><div><b>Add a shape</b><br>Click any shape in the left column — a box, sphere, cylinder. It pops into your scene.</div></div>
+          <div class="kid-step"><span class="num">2</span><div><b>Move it around</b><br>Click your shape, then drag the red/green/blue arrows to slide it. Drag the colored rings to rotate.</div></div>
+          <div class="kid-step"><span class="num">3</span><div><b>Paint it</b><br>Use the Color picker at the bottom (Model). Try the chips for quick colors!</div></div>
+          <div class="kid-step"><span class="num">4</span><div><b>Take a look around</b><br>Drag empty space to spin the view. Top/Front/Left etc. on the right jump to fixed angles.</div></div>
+          <div class="kid-step"><span class="num">5</span><div><b>Undo a mistake</b><br>Hit Undo (or Ctrl+Z). The 📜 History button shows everything you did.</div></div>
+          <div class="kid-step"><span class="num">6</span><div><b>Save your work</b><br>💾 Save keeps it in this browser. ⬇ Project downloads a file you can re-open later.</div></div>
+        </div>
+        <button class="kid-go" data-close>Got it!</button>
+      </div>
+    </div>
+    <div id="color-chips" title="Quick colors">
+      <button data-c="#ff6b6b" style="background:#ff6b6b"></button>
+      <button data-c="#ffd93d" style="background:#ffd93d"></button>
+      <button data-c="#6bcb77" style="background:#6bcb77"></button>
+      <button data-c="#4d96ff" style="background:#4d96ff"></button>
+      <button data-c="#9b5de5" style="background:#9b5de5"></button>
+      <button data-c="#ff90b3" style="background:#ff90b3"></button>
+      <button data-c="#ff8c42" style="background:#ff8c42"></button>
+      <button data-c="#222222" style="background:#222222"></button>
+      <button data-c="#ffffff" style="background:#ffffff;border-color:#aaa"></button>
+    </div>
+
     <div id="history-panel" style="display:none;">
       <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:8px;">📜 History</div>
       <div id="history-list" style="font-size:11px; max-height:60vh; overflow-y:auto;"></div>
@@ -298,22 +377,22 @@
       </div>
       <div class="grp">
         <div class="row"><label>Color</label><input type="color" id="mat-color" value="#9aa4af"></div>
-        <div class="row"><label>Metal</label><input type="range" id="mat-metal" min="0" max="1" step="0.01" value="0.85"></div>
-        <div class="row"><label>Rough</label><input type="range" id="mat-rough" min="0" max="1" step="0.01" value="0.28"></div>
+        <div class="row"><label>Shiny</label><input type="range" id="mat-metal" min="0" max="1" step="0.01" value="0.85"></div>
+        <div class="row"><label>Smooth</label><input type="range" id="mat-rough" min="0" max="1" step="0.01" value="0.28"></div>
         <div class="row"><label>Glow</label><input type="range" id="mat-emiss" min="0" max="1.5" step="0.01" value="0.35"></div>
-        <div class="row"><label>Emit</label><input type="color" id="mat-emiss-color" value="#0a3a35"></div>
+        <div class="row"><label>Glow Color</label><input type="color" id="mat-emiss-color" value="#0a3a35"></div>
       </div>
       <div class="grp">
-        <div class="row"><label>Uniform</label><input type="range" id="uni-scale" min="0.2" max="3" step="0.01" value="1"></div>
+        <div class="row"><label>Size</label><input type="range" id="uni-scale" min="0.2" max="3" step="0.01" value="1"></div>
       </div>
       <div class="grp">
         <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">Lighting</div>
-        <div class="row"><label>Ambient</label><input type="range" id="lt-ambient" min="0" max="2" step="0.01" value="0.45"></div>
-        <div class="row"><label>Key</label><input type="range" id="lt-key" min="0" max="4" step="0.01" value="1.6"></div>
-        <div class="row"><label>Key clr</label><input type="color" id="lt-key-color" value="#ffffff"></div>
-        <div class="row"><label>Rim</label><input type="range" id="lt-rim" min="0" max="3" step="0.01" value="0.7"></div>
-        <div class="row"><label>Rim clr</label><input type="color" id="lt-rim-color" value="#39e1c4"></div>
-        <div class="row"><label>Bg</label><input type="color" id="lt-bg-color" value="#0b0d10"></div>
+        <div class="row"><label>Daylight</label><input type="range" id="lt-ambient" min="0" max="2" step="0.01" value="0.45"></div>
+        <div class="row"><label>Sun</label><input type="range" id="lt-key" min="0" max="4" step="0.01" value="1.6"></div>
+        <div class="row"><label>Sun Color</label><input type="color" id="lt-key-color" value="#ffffff"></div>
+        <div class="row"><label>Rim Light</label><input type="range" id="lt-rim" min="0" max="3" step="0.01" value="0.7"></div>
+        <div class="row"><label>Rim Color</label><input type="color" id="lt-rim-color" value="#39e1c4"></div>
+        <div class="row"><label>Background</label><input type="color" id="lt-bg-color" value="#0b0d10"></div>
         <div class="mode-btns" id="lt-presets" style="margin-top:6px;">
           <button data-preset="studio">Studio</button>
           <button data-preset="showroom">Showroom</button>
@@ -342,6 +421,10 @@
       <button id="btn-spin" class="primary">↻ Spin</button>
       <button id="btn-fit">⊕ Fit</button>
       <button id="btn-bg">◐ Preset</button>
+      <button id="btn-save" title="Save project to browser">💾 Save</button>
+      <button id="btn-load" title="Load saved project">📂 Load</button>
+      <button id="btn-export-project" title="Download as .kauvi.json">⬇ Project</button>
+      <button id="btn-help" title="Quick start guide">❓ Help</button>
     </div>
   </div>
 </div>
@@ -377,7 +460,7 @@ stage.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const bgPalette = [
-  { col: 0x0b0d10, fog: 0x0b0d10 },
+  { col: 0xf5f7fb, fog: 0xf5f7fb },
   { col: 0x111827, fog: 0x111827 },
   { col: 0x1a1530, fog: 0x1a1530 },
   { col: 0xeef2f5, fog: 0xeef2f5 },
@@ -1037,6 +1120,159 @@ document.getElementById('btn-ortho').addEventListener('click', () => {
   document.getElementById('btn-ortho').textContent = isOrtho ? 'Ortho' : 'Persp';
   setStatus(isOrtho ? 'Orthographic' : 'Perspective', 1000);
 });
+
+
+
+// === KID-FRIENDLY: SAVE/LOAD + HELP + WELCOME ===
+const STORAGE_KEY = 'kauvi-3d-studio-project';
+const LATEST_KEY = 'kauvi-3d-studio-latest';
+
+function serializeScene() {
+  const out = {
+    name: 'Kauvi 3D Project',
+    saved_at: new Date().toISOString(),
+    bg: '#' + scene.background.getHexString(),
+    lights: {
+      ambient: hemi.intensity,
+      key: key.intensity,
+      keyCol: '#' + key.color.getHexString(),
+      rim: rim.intensity,
+      rimCol: '#' + rim.color.getHexString(),
+    },
+    camera: { pos: camera.position.toArray(), tgt: controls.target.toArray() },
+    objects: sceneObjects.map(o => ({
+      kind: o.userData.kind, name: o.userData.name,
+      pos: o.position.toArray(), rot: o.rotation.toArray(),
+      scl: o.scale.toArray(),
+      color: '#' + o.material.color.getHexString(),
+      metal: o.material.metalness, rough: o.material.roughness,
+    })),
+  };
+  return out;
+}
+
+function applySnapshot(snap) {
+  // Clear existing primitives (keep loaded STL)
+  sceneObjects.forEach(o => { scene.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  sceneObjects.length = 0;
+  if (transformControls.object && !mesh) transformControls.detach();
+  // Restore objects
+  (snap.objects || []).forEach(o => {
+    const m = makePrimitive(o.kind, { color: o.color });
+    if (!m) return;
+    m.position.fromArray(o.pos);
+    m.rotation.fromArray(o.rot.slice(0,3));
+    m.scale.fromArray(o.scl);
+    m.material.metalness = o.metal;
+    m.material.roughness = o.rough;
+    m.userData.name = o.name;
+  });
+  // Background + lights
+  if (snap.bg) { const c = new THREE.Color(snap.bg); scene.background = c; scene.fog = new THREE.Fog(c.getHex(), 400, 1400); qcBg.value = snap.bg; }
+  if (snap.lights) {
+    if (snap.lights.ambient !== undefined) { hemi.intensity = snap.lights.ambient; ltAmbient.value = snap.lights.ambient; }
+    if (snap.lights.key !== undefined) { key.intensity = snap.lights.key; ltKey.value = snap.lights.key; }
+    if (snap.lights.keyCol) { key.color = new THREE.Color(snap.lights.keyCol); ltKeyColor.value = snap.lights.keyCol; }
+    if (snap.lights.rim !== undefined) { rim.intensity = snap.lights.rim; ltRim.value = snap.lights.rim; }
+    if (snap.lights.rimCol) { rim.color = new THREE.Color(snap.lights.rimCol); ltRimColor.value = snap.lights.rimCol; }
+  }
+  if (snap.camera) { camera.position.fromArray(snap.camera.pos); controls.target.fromArray(snap.camera.tgt); controls.update(); }
+}
+
+document.getElementById('btn-save').addEventListener('click', () => {
+  try {
+    const data = serializeScene();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(LATEST_KEY, JSON.stringify(data));
+    setStatus('Saved! 💾', 1500);
+    pushHistory('Saved project');
+  } catch (e) {
+    setStatus('Save failed: ' + e.message, 2200);
+  }
+});
+
+document.getElementById('btn-load').addEventListener('click', () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LATEST_KEY);
+    if (!raw) { setStatus('Nothing saved yet — try Save first', 1800); return; }
+    const data = JSON.parse(raw);
+    applySnapshot(data);
+    setStatus('Loaded your project! 📂', 1500);
+    pushHistory('Loaded project');
+  } catch (e) {
+    setStatus('Load failed: ' + e.message, 2200);
+  }
+});
+
+document.getElementById('btn-export-project').addEventListener('click', () => {
+  try {
+    const data = serializeScene();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kauvi-project-' + Date.now() + '.kauvi.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus('Project downloaded ⬇', 1500);
+  } catch (e) {
+    setStatus('Download failed: ' + e.message, 2200);
+  }
+});
+
+// Also accept project JSON via file drop / file open (reuse #fileinput)
+document.getElementById('fileinput').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  if (f.name.endsWith('.kauvi.json') || f.name.endsWith('.json')) {
+    const r = new FileReader();
+    r.onload = ev => {
+      try { applySnapshot(JSON.parse(ev.target.result)); setStatus('Loaded project file', 1500); }
+      catch (e2) { setStatus('Bad project file: ' + e2.message, 2200); }
+    };
+    r.readAsText(f);
+  }
+}, { capture: true });
+
+// HELP dialog
+const helpDialog = document.getElementById('help-dialog');
+function openHelp() { helpDialog.classList.add('show'); }
+function closeHelp() { helpDialog.classList.remove('show'); }
+document.getElementById('btn-help').addEventListener('click', openHelp);
+helpDialog.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeHelp));
+helpDialog.addEventListener('click', e => { if (e.target === helpDialog) closeHelp(); });
+
+// Show welcome on first visit
+const WELCOME_KEY = 'kauvi-welcome-shown';
+window.addEventListener('load', () => setTimeout(() => {
+  if (!localStorage.getItem(WELCOME_KEY)) {
+    openHelp();
+    localStorage.setItem(WELCOME_KEY, '1');
+  }
+}, 2500));
+
+// Color chips: apply to currently-selected mesh (transformControls.object) or to mat (fallback)
+document.querySelectorAll('#color-chips button').forEach(b => {
+  b.addEventListener('click', () => {
+    const c = b.dataset.c;
+    const target = transformControls.object || mesh;
+    if (target && target.material) {
+      target.material.color = new THREE.Color(c);
+      if (target === mesh) qcModel.value = c;
+      setStatus('Color: ' + c, 800);
+      pushHistory('Pick color ' + c);
+    }
+  });
+});
+
+// White-by-default tuning: apply Showroom-style lighting on first load
+window.addEventListener('load', () => setTimeout(() => {
+  hemi.intensity = 0.95; ltAmbient.value = 0.95;
+  key.intensity = 2.4; ltKey.value = 2.4;
+  rim.intensity = 0.4; ltRim.value = 0.4;
+  rim.color = new THREE.Color(0x88ccff); ltRimColor.value = '#88ccff';
+  if (ground) ground.material.opacity = 0.15;
+}, 100));
 
 </script>
 </body>
