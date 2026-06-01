@@ -851,7 +851,10 @@ document.addEventListener('keydown', e => {
  'lt-ambient','lt-key','lt-key-color','lt-rim','lt-rim-color','lt-bg-color']
   .forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('change', () => pushHistory('Adjust ' + id.replace(/^(mat|qc|lt)-/, '')));
+    if (!el) return;
+    const label = 'Adjust ' + id.replace(/^(mat|qc|lt)-/, '');
+    el.addEventListener('change', () => pushHistory(label));
+    el.addEventListener('input', () => pushHistoryDebounced(label, 500));
   });
 document.querySelectorAll('#lt-presets button').forEach(btn => {
   btn.addEventListener('click', () => pushHistory('Preset: ' + btn.dataset.preset));
