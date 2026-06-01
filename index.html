@@ -824,6 +824,8 @@
       <button id="btn-delete" title="Delete selected (Del)">🗑 Delete</button>
       <button id="btn-group" title="Group selected (Cmd/Ctrl+G)">🔗 Group</button>
       <button id="btn-ungroup" title="Ungroup selected (Cmd/Ctrl+Shift+G)">✂ Ungroup</button>
+      <button id="btn-hole" title="Mark selected as Hole — will be subtracted on Merge">🕳 Hole</button>
+      <button id="btn-merge" title="Merge selected: combine solids and subtract holes (CSG)">🔨 Merge</button>
       <button id="btn-align-x" title="Align selected on X (line them up sideways)">⫶ AlignX</button>
       <button id="btn-align-y" title="Align selected on Y (line them up vertically)">⫶ AlignY</button>
       <button id="btn-align-z" title="Align selected on Z (line them up depth)">⫶ AlignZ</button>
@@ -846,7 +848,9 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.6/build/index.module.js",
+    "three-bvh-csg": "https://unpkg.com/three-bvh-csg@0.0.17/build/index.module.js"
   }
 }
 </script>
@@ -856,6 +860,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { Evaluator, Brush, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 
 const stage = document.getElementById('stage');
 const dropzone = document.getElementById('dropzone');
@@ -2694,6 +2699,181 @@ function submitRef() {
 }
 refGen.addEventListener('click', submitRef);
 refInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitRef(); }});
+
+
+// === V7: CSG SOLID / HOLE / MERGE (three-bvh-csg) ===
+const csgEvaluator = new Evaluator();
+csgEvaluator.useGroups = false;
+
+function isHole(obj) { return obj?.userData?.csgMode === 'hole'; }
+
+function applyHoleVisual(obj) {
+  if (!obj || !obj.material) return;
+  if (isHole(obj)) {
+    obj.material.transparent = true;
+    obj.material.opacity = 0.4;
+    if (!obj.userData._holeOutline) {
+      const outline = new THREE.Mesh(obj.geometry, new THREE.MeshBasicMaterial({ color: 0xff3366, wireframe: true, transparent: true, opacity: 0.85 }));
+      outline.userData._isHoleOutline = true;
+      obj.userData._holeOutline = outline;
+      scene.add(outline);
+    }
+  } else {
+    obj.material.transparent = false;
+    obj.material.opacity = 1;
+    if (obj.userData._holeOutline) {
+      scene.remove(obj.userData._holeOutline);
+      if (obj.userData._holeOutline.material) obj.userData._holeOutline.material.dispose();
+      obj.userData._holeOutline = null;
+    }
+  }
+}
+
+function refreshHoleOutlines() {
+  sceneObjects.forEach(o => {
+    if (isHole(o) && o.userData._holeOutline) {
+      const h = o.userData._holeOutline;
+      h.position.copy(o.position);
+      h.rotation.copy(o.rotation);
+      h.scale.copy(o.scale);
+      h.visible = o.visible !== false;
+    }
+  });
+}
+setInterval(refreshHoleOutlines, 100);
+
+function toggleHole() {
+  if (selectedObjects.length === 0) { setStatus('Pick a shape first', 1300); return; }
+  const targets = selectedObjects.filter(o => o !== mesh);
+  if (targets.length === 0) { setStatus('Cannot toggle the scorpion', 1300); return; }
+  // Decide new state based on first target
+  const wasHole = isHole(targets[0]);
+  const newMode = wasHole ? 'solid' : 'hole';
+  targets.forEach(o => {
+    if (!o.userData) o.userData = {};
+    o.userData.csgMode = newMode;
+    applyHoleVisual(o);
+  });
+  beepClick();
+  setStatus(newMode === 'hole' ? 'Marked as Hole 🕳 — will be subtracted on Merge' : 'Marked as Solid ✓', 1600);
+  pushHistory('Hole ' + newMode);
+  refreshObjectsPanel();
+}
+document.getElementById('btn-hole').addEventListener('click', toggleHole);
+
+function bakeMatrixIntoGeom(obj) {
+  // Returns a NEW BufferGeometry that has the world transform baked in.
+  const g = obj.geometry.clone();
+  obj.updateMatrixWorld(true);
+  g.applyMatrix4(obj.matrixWorld);
+  return g;
+}
+
+function mergeSelection() {
+  if (selectedObjects.length < 2) { setStatus('Pick 2+ shapes to merge (Shift+click)', 1700); return; }
+  const targets = selectedObjects.filter(o => o !== mesh);
+  if (targets.length < 2) { setStatus('Need 2+ shapes (not the scorpion)', 1700); return; }
+  const solids = targets.filter(o => !isHole(o));
+  const holes = targets.filter(o => isHole(o));
+  if (solids.length === 0) { setStatus('Need at least one Solid in the selection', 1700); return; }
+  try {
+    setStatus('Merging...', 8000);
+    // Build initial accumulator from first solid
+    const baseGeom = bakeMatrixIntoGeom(solids[0]);
+    let acc = new Brush(baseGeom);
+    acc.updateMatrixWorld();
+    // Add remaining solids via ADDITION
+    for (let i = 1; i < solids.length; i++) {
+      const g = bakeMatrixIntoGeom(solids[i]);
+      const b = new Brush(g);
+      b.updateMatrixWorld();
+      acc = csgEvaluator.evaluate(acc, b, ADDITION);
+    }
+    // Subtract each hole
+    for (let i = 0; i < holes.length; i++) {
+      const g = bakeMatrixIntoGeom(holes[i]);
+      const b = new Brush(g);
+      b.updateMatrixWorld();
+      acc = csgEvaluator.evaluate(acc, b, SUBTRACTION);
+    }
+    // Build final mesh
+    const baseMat = solids[0].material;
+    const mergedMat = new THREE.MeshStandardMaterial({
+      color: baseMat.color.clone(),
+      metalness: baseMat.metalness ?? 0.4,
+      roughness: baseMat.roughness ?? 0.45,
+    });
+    const finalGeom = acc.geometry.clone();
+    finalGeom.computeVertexNormals();
+    const finalMesh = new THREE.Mesh(finalGeom, mergedMat);
+    finalMesh.castShadow = true;
+    finalMesh.userData = { kind: 'merged', name: 'merged_' + (sceneObjects.length + 1), csgMode: 'solid' };
+    scene.add(finalMesh);
+    sceneObjects.push(finalMesh);
+    // Remove originals
+    targets.forEach(o => {
+      const idx = sceneObjects.indexOf(o);
+      if (idx !== -1) sceneObjects.splice(idx, 1);
+      if (o.userData._selOutline) scene.remove(o.userData._selOutline);
+      if (o.userData._holeOutline) { scene.remove(o.userData._holeOutline); o.userData._holeOutline.material?.dispose(); }
+      scene.remove(o);
+      o.geometry?.dispose(); o.material?.dispose();
+    });
+    selectionClear();
+    selectionAdd(finalMesh, false);
+    refreshObjectsPanel();
+    refreshSizeReadout();
+    beepAdd();
+    setStatus('Merged ' + targets.length + ' shapes into 1 🔨', 1800);
+    pushHistory('Merge (' + solids.length + ' solid, ' + holes.length + ' hole)');
+  } catch (e) {
+    console.error('CSG merge error', e);
+    setStatus('Merge failed: ' + e.message.slice(0, 60), 2500);
+  }
+}
+document.getElementById('btn-merge').addEventListener('click', mergeSelection);
+
+// Hook hole-aware icon into objects panel kind icon
+const _origRefreshObjectsPanel2 = refreshObjectsPanel;
+window.refreshObjectsPanel = function() {
+  _origRefreshObjectsPanel2();
+  // After list rebuild, prefix hole-marked rows with 🕳
+  document.querySelectorAll('#objects-list .obj-row .name').forEach((nameEl, i) => {
+    // Get the obj from sceneObjects order (account for the scorpion row at top)
+    const offset = mesh ? 1 : 0;
+    const obj = i === 0 && mesh ? mesh : sceneObjects[i - offset];
+    if (obj && isHole(obj) && !nameEl.textContent.startsWith('🕳')) {
+      nameEl.textContent = '🕳 ' + nameEl.textContent;
+    }
+  });
+};
+
+// Extend AI Chat: add Hole and Merge as possible actions the model can emit.
+// Patch executeCommands to accept them.
+const _origExecuteCommands = executeCommands;
+window.executeCommands = function(plan) {
+  let extraN = 0;
+  if (plan && Array.isArray(plan.commands)) {
+    plan.commands.forEach(cmd => {
+      try {
+        if (cmd.action === 'markHole' && Array.isArray(cmd.indices)) {
+          cmd.indices.forEach(i => {
+            const o = sceneObjects[i];
+            if (o) { o.userData.csgMode = 'hole'; applyHoleVisual(o); extraN++; }
+          });
+        } else if (cmd.action === 'merge') {
+          // merge all current sceneObjects (skip scorpion)
+          selectionClear();
+          sceneObjects.forEach(o => selectionAdd(o, true));
+          mergeSelection();
+          extraN++;
+        }
+      } catch(e) { console.error('csg cmd err', e); }
+    });
+  }
+  const baseN = _origExecuteCommands(plan);
+  return baseN + extraN;
+};
 
 </script>
 </body>
