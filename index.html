@@ -164,6 +164,7 @@
       <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
       <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
       <button id="btn-download" title="Download current STL for 3D printing">⬇ Download</button>
+      <button id="btn-edit" title="Toggle edit mode">✎ Edit</button>
       <button id="btn-reset">↺ Reset</button>
       <button id="btn-wire">▒ Wireframe</button>
       <button id="btn-spin" class="primary">↻ Spin</button>
@@ -184,7 +185,9 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 
 const stage = document.getElementById('stage');
 const dropzone = document.getElementById('dropzone');
