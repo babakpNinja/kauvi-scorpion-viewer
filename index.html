@@ -784,8 +784,8 @@ document.querySelectorAll('#lt-presets button').forEach(btn => {
   });
 });
 
-// Reset: restore pristine geometry + default material values + identity transform
-document.getElementById('btn-undo').addEventListener('click', ()=>{
+// Edit-panel Reset (button in #edit-panel) — restore pristine geometry + default material + identity transform
+document.getElementById('btn-edit-reset').addEventListener('click', ()=>{
   if (!mesh || !originalGeometry) return;
   mesh.geometry.dispose();
   mesh.geometry = originalGeometry.clone();
@@ -799,6 +799,7 @@ document.getElementById('btn-undo').addEventListener('click', ()=>{
   matEmiss.value = 0.35; mat.emissiveIntensity = 0.35;
   matEmissColor.value = '#0a3a35'; mat.emissive = new THREE.Color(0x0a3a35);
   triCount.textContent = (mesh.geometry.attributes.position.count / 3 | 0).toLocaleString() + ' tris · ' + currentName;
+  pushHistory('Reset (panel)');
   setStatus('Reset to original', 1500);
 });
 
