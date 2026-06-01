@@ -624,36 +624,6 @@
   </header>
   <div id="stage">
     <div id="dropzone"></div>
-    <!-- v8: left sidebar (Shapes / Templates / Camera) -->
-    <aside id="layout-left" class="sidebar">
-      <div class="sb-tabs" role="tablist">
-        <button data-tab="shapes" class="active" role="tab">⚪ Shapes</button>
-        <button data-tab="templates" role="tab">🎨 Templates</button>
-        <button data-tab="camera" role="tab">📷 Camera</button>
-      </div>
-      <div class="sb-body">
-        <div class="sb-pane active" data-pane="shapes" id="pane-shapes"></div>
-        <div class="sb-pane" data-pane="templates" id="pane-templates"></div>
-        <div class="sb-pane" data-pane="camera" id="pane-camera"></div>
-      </div>
-    </aside>
-    <button id="left-collapse" title="Collapse sidebar">◀</button>
-    <!-- v8: right sidebar (Objects / Properties / Reference) -->
-    <aside id="layout-right" class="sidebar">
-      <div class="sb-tabs" role="tablist">
-        <button data-tab="objects" class="active" role="tab">📋 Objects</button>
-        <button data-tab="properties" role="tab">⚙ Edit</button>
-        <button data-tab="reference" role="tab">📸 Reference</button>
-      </div>
-      <div class="sb-body">
-        <div class="sb-pane active" data-pane="objects" id="pane-objects"></div>
-        <div class="sb-pane" data-pane="properties" id="pane-properties"></div>
-        <div class="sb-pane" data-pane="reference" id="pane-reference">
-          <div id="ref-panel-inline"></div>
-        </div>
-      </div>
-    </aside>
-    <button id="right-collapse" title="Collapse sidebar">▶</button>
     <div id="size-readout" title="Real-world size in mm (1 unit = 1 mm)">
       <div class="label">Selected size</div>
       <div class="row"><b>W</b><span id="sz-w">—</span></div>
@@ -2682,7 +2652,8 @@ const refPromptShown = document.getElementById('ref-prompt-shown');
 const REF_KEY = 'kauvi-ref-image';
 
 function openRefPanel() {
-  if (window._openReferenceTab) window._openReferenceTab();
+  const refTabBtn = document.querySelector('#right-sidebar .sb-tabs [data-tab="ref"]');
+  if (refTabBtn) refTabBtn.click();
   setTimeout(() => { const inp = document.getElementById('ref-input'); inp && inp.focus(); }, 120);
 }
 function closeRefPanel() { /* sidebar tab; no-op */ }
@@ -2743,87 +2714,6 @@ refGen.addEventListener('click', submitRef);
 refInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitRef(); }});
 
 
-// === V8: SIDEBAR LAYOUT — relocate existing panels into tabbed sidebars ===
-(function relocatePanels() {
-  const paneShapes = document.getElementById('pane-shapes');
-  const paneTemplates = document.getElementById('pane-templates');
-  const paneCamera = document.getElementById('pane-camera');
-  const paneObjects = document.getElementById('pane-objects');
-  const paneProperties = document.getElementById('pane-properties');
-  const refInline = document.getElementById('ref-panel-inline');
-
-  // Move shape-palette into shapes pane
-  const sp = document.getElementById('shape-palette');
-  if (sp && paneShapes) paneShapes.appendChild(sp);
-
-  // Move templates panel into templates pane
-  const tp = document.getElementById('templates');
-  if (tp && paneTemplates) paneTemplates.appendChild(tp);
-
-  // Move cam-bar into camera pane
-  const cb = document.getElementById('cam-bar');
-  if (cb && paneCamera) paneCamera.appendChild(cb);
-
-  // Move objects panel + size readout into objects pane
-  const sz = document.getElementById('size-readout');
-  if (sz && paneObjects) paneObjects.appendChild(sz);
-  const op = document.getElementById('objects-panel');
-  if (op && paneObjects) paneObjects.appendChild(op);
-
-  // Move edit-panel into properties pane (force visible since position is now sidebar)
-  const ep = document.getElementById('edit-panel');
-  if (ep && paneProperties) { paneProperties.appendChild(ep); ep.classList.add('show'); }
-
-  // Move reference panel's inner content into ref pane
-  const oldRef = document.getElementById('ref-panel');
-  if (oldRef && refInline) {
-    // Pull out the image wrap + prompt + input row from the original ref-panel
-    const wrap = document.getElementById('ref-image-wrap');
-    const promptShown = document.getElementById('ref-prompt-shown');
-    const inputRow = document.getElementById('ref-input-row');
-    if (wrap) refInline.appendChild(wrap);
-    if (promptShown) refInline.appendChild(promptShown);
-    if (inputRow) refInline.appendChild(inputRow);
-  }
-
-  // Tab switching
-  document.querySelectorAll('.sb-tabs').forEach(tabs => {
-    tabs.querySelectorAll('button[data-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const target = btn.dataset.tab;
-        const sidebar = btn.closest('.sidebar');
-        sidebar.querySelectorAll('.sb-tabs button').forEach(b => b.classList.toggle('active', b === btn));
-        sidebar.querySelectorAll('.sb-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
-      });
-    });
-  });
-
-  // Collapse buttons
-  const leftSb = document.getElementById('layout-left');
-  const rightSb = document.getElementById('layout-right');
-  const leftCol = document.getElementById('left-collapse');
-  const rightCol = document.getElementById('right-collapse');
-  if (leftCol) leftCol.addEventListener('click', () => {
-    leftSb.classList.toggle('collapsed');
-    leftCol.textContent = leftSb.classList.contains('collapsed') ? '▶' : '◀';
-  });
-  if (rightCol) rightCol.addEventListener('click', () => {
-    rightSb.classList.toggle('collapsed');
-    rightCol.textContent = rightSb.classList.contains('collapsed') ? '◀' : '▶';
-  });
-
-  // Make Edit button in toolbar toggle the Properties tab in right sidebar
-  const editBtn = document.getElementById('btn-edit');
-  if (editBtn) {
-    editBtn.style.display = 'none'; // Edit panel is always visible now
-  }
-
-  // When AI Chat returns showImage, ensure right sidebar Reference tab is active
-  window._openReferenceTab = function() {
-    const refTabBtn = document.querySelector('#layout-right .sb-tabs [data-tab="reference"]');
-    if (refTabBtn) refTabBtn.click();
-  };
-})();
 
 
 // === V7: CSG SOLID / HOLE / MERGE (three-bvh-csg) ===
