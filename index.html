@@ -3282,5 +3282,458 @@ window.executeCommands = function(plan) {
 };
 
 </script>
+
+<!-- ============================================================
+     V8 LAYOUT: collapsible left/right sidebars + grouped toolbar
+     ============================================================ -->
+<style id="layout-v8">
+  #app {
+    display: grid !important;
+    grid-template-columns: var(--lsw,236px) 1fr var(--rsw,272px);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "header header header"
+      "left   stage  right"
+      "tools  tools  tools";
+    height: 100%;
+  }
+  #app > header { grid-area: header; }
+  #app > #stage { grid-area: stage; position: relative; }
+  #left-sidebar { grid-area: left; }
+  #right-sidebar { grid-area: right; }
+  #app > #toolbar { grid-area: tools; }
+  #app.left-collapsed { --lsw: 0px; }
+  #app.right-collapsed { --rsw: 0px; }
+  #left-sidebar, #right-sidebar {
+    background: rgba(248,250,253,0.96);
+    border-right: 1px solid #d6dbe1;
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+    z-index: 7;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  #right-sidebar { border-right: none; border-left: 1px solid #d6dbe1; }
+  .sb-tabs {
+    display: flex; gap: 2px;
+    padding: 6px 6px 0 6px;
+    background: #eef2f5;
+    border-bottom: 1px solid #d6dbe1;
+    overflow-x: auto;
+  }
+  .sb-tabs button {
+    appearance: none; background: transparent;
+    border: 1px solid transparent;
+    padding: 6px 10px;
+    font-size: 11px; font-weight: 600;
+    color: #4b5563;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer; white-space: nowrap;
+  }
+  .sb-tabs button:hover { background: #f9fafb; color: #0b0d10; }
+  .sb-tabs button.active {
+    background: rgba(255,255,255,0.96);
+    border-color: #d6dbe1; color: #7c5cff;
+  }
+  .sb-panels { flex: 1; overflow-y: auto; padding: 10px; min-height: 0; }
+  .sb-panel { display: none; }
+  .sb-panel.active { display: block; }
+  .sb-panel h4 {
+    margin: 0 0 8px 0;
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #6b7280; font-weight: 700;
+  }
+  .sb-collapse-btn {
+    position: fixed; top: 70px; z-index: 9;
+    background: white; border: 1px solid #d6dbe1;
+    color: #4b5563;
+    width: 22px; height: 42px;
+    cursor: pointer; font-size: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    line-height: 1;
+  }
+  #left-collapse { left: var(--lsw, 236px); border-radius: 0 8px 8px 0; transition: left 200ms ease; border-left: none; }
+  #right-collapse { right: var(--rsw, 272px); border-radius: 8px 0 0 8px; transition: right 200ms ease; border-right: none; }
+  #app.left-collapsed #left-collapse { left: 0; }
+  #app.right-collapsed #right-collapse { right: 0; }
+
+  body #shape-palette, body #templates, body #cam-bar, body #size-readout,
+  body #edit-panel, body #objects-panel, body #history-panel, body #ref-panel {
+    position: static !important;
+    top: auto !important; left: auto !important; right: auto !important; bottom: auto !important;
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    max-height: none !important;
+    background: transparent !important;
+    border: none !important; box-shadow: none !important;
+    padding: 0 !important; margin: 0 !important;
+    z-index: auto !important;
+    display: block !important;
+    backdrop-filter: none !important;
+  }
+  body #ref-panel { display: none !important; }
+  body #ref-panel.show { display: flex !important; flex-direction: column !important; }
+  body #ref-panel #ref-header, body #ref-launcher { display: none !important; }
+
+  #shape-palette {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+  }
+  #shape-palette button {
+    width: 100% !important;
+    aspect-ratio: 1 !important;
+    height: auto !important;
+    font-size: 22px !important;
+    background: #ffffff !important;
+    border: 1px solid #d6dbe1 !important;
+    border-radius: 10px !important;
+    color: #0b0d10 !important;
+    padding: 0 !important;
+  }
+  #shape-palette button:hover { background: #f3f6fa !important; border-color: #7c5cff !important; }
+
+  #templates { display: flex !important; flex-direction: column !important; gap: 6px !important; }
+  #templates button {
+    background: linear-gradient(180deg, #ffffff, #f3f6fa) !important;
+    border: 1px solid #d6dbe1 !important;
+    color: #0b0d10 !important;
+    padding: 9px 12px !important;
+    border-radius: 9px !important;
+    font-size: 12px !important; font-weight: 600 !important;
+    text-align: left !important; cursor: pointer !important;
+    width: 100% !important; min-width: 0 !important;
+  }
+  #templates .label { display: none !important; }
+
+  #cam-bar { display: flex !important; flex-direction: column !important; gap: 6px !important; }
+  #cam-bar .row { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+  #cam-bar button {
+    background: #ffffff !important;
+    color: #0b0d10 !important;
+    border: 1px solid #d6dbe1 !important;
+    padding: 6px 10px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+    width: 100% !important; min-width: 0 !important;
+  }
+
+  #size-readout { font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 12px; color: #0b0d10; }
+  #size-readout .label { display: block; margin-bottom: 4px; font-family: -apple-system, system-ui, sans-serif; font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
+  #size-readout .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  #size-readout .row b { color: #0b0d10; font-weight: 600; }
+  #size-readout .row span { color: #1f6aa5; }
+  #size-readout .scene { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #d6dbe1; }
+
+  #edit-panel { color: #0b0d10 !important; font-size: 12px !important; }
+  #edit-panel h3 { color: #7c5cff !important; }
+  #edit-panel .row label { color: #6b7280 !important; }
+  #edit-panel .row input[type="number"] { background: #f9fafb !important; color: #0b0d10 !important; border-color: #d6dbe1 !important; }
+  #edit-panel .grp { border-top-color: #e5e9ed !important; }
+  #edit-panel .mode-btns button { color: #0b0d10 !important; border-color: #d6dbe1 !important; background: white !important; }
+  #edit-panel .mode-btns button.active { color: #7c5cff !important; border-color: #7c5cff !important; }
+  #edit-panel .apply-row button { color: #0b0d10 !important; border-color: #d6dbe1 !important; background: white !important; }
+  #edit-panel .apply-row button.primary { color: #7c5cff !important; border-color: #7c5cff !important; }
+
+  #objects-panel .label { display: none !important; }
+
+  body #toolbar {
+    position: static !important; transform: none !important;
+    width: 100% !important; max-width: 100% !important;
+    left: auto !important; bottom: auto !important;
+    background: rgba(245,247,251,0.98) !important;
+    border: none !important;
+    border-top: 1px solid #d6dbe1 !important;
+    border-radius: 0 !important;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04) !important;
+    padding: 8px 10px !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    z-index: 5 !important;
+    display: flex !important; gap: 4px !important; align-items: center !important;
+    flex-wrap: nowrap !important; overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  body #toolbar button, body #toolbar label, body #toolbar select {
+    color: #0b0d10 !important; background: white !important;
+    border: 1px solid #d6dbe1 !important;
+    padding: 7px 10px !important;
+    border-radius: 7px !important;
+    font-size: 12px !important;
+    cursor: pointer !important; white-space: nowrap !important;
+    transition: background 80ms ease, border-color 80ms ease !important;
+  }
+  body #toolbar button:hover, body #toolbar label:hover { background: #f3f6fa !important; border-color: #7c5cff !important; color: #7c5cff !important; }
+  body #toolbar button.primary { border-color: #7c5cff !important; color: #7c5cff !important; background: #faf5ff !important; }
+  body #toolbar .color-swatch { background: white !important; color: #0b0d10 !important; border: 1px solid #d6dbe1 !important; padding: 4px 8px !important; }
+  body #toolbar .color-swatch span { color: #4b5563 !important; }
+  body #toolbar .group-sep {
+    display: inline-block !important;
+    width: 1px; height: 22px;
+    background: #d6dbe1;
+    margin: 0 4px;
+  }
+
+  body #info { display: none !important; }
+  body #status {
+    position: absolute !important;
+    top: 12px !important; left: 50% !important;
+    transform: translateX(-50%) !important;
+    background: rgba(124,92,255,0.95) !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 999px !important;
+    font-size: 12px !important; font-weight: 600 !important;
+    box-shadow: 0 4px 12px rgba(124,92,255,0.3) !important;
+    z-index: 8 !important;
+  }
+
+  body #history-list { font-size: 11px; }
+  body #history-list .h-item { color: #0b0d10 !important; padding: 4px 6px !important; }
+  body #history-list .h-item:hover { background: #eef2f5 !important; }
+  body #history-list .h-item.current { background: #e6f9f5 !important; color: #0b8a72 !important; }
+  body #history-list .h-item .meta { color: #6b7280 !important; }
+
+  body #ai-launcher { bottom: 76px !important; right: 16px !important; }
+  body #ai-chat-panel { bottom: 130px !important; right: 16px !important; }
+
+  body header { background: #ffffff !important; border-bottom: 1px solid #e5e9ed !important; padding: 10px 14px !important; }
+  body header h1 { color: #0b0d10 !important; font-size: 14px !important; }
+  body header h1 span { background: linear-gradient(90deg, #7c5cff, #39e1c4); -webkit-background-clip: text; background-clip: text; color: transparent !important; }
+  body header .badge { color: #4b5563 !important; border-color: #d6dbe1 !important; }
+
+  body #color-chips {
+    position: static !important;
+    display: grid !important;
+    grid-template-columns: repeat(9, 1fr) !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    width: 100% !important;
+  }
+  body #color-chips button {
+    width: 100% !important; height: 26px !important;
+    border-radius: 6px !important;
+    border: 1px solid #d6dbe1 !important;
+  }
+
+  #left-mobile-toggle, #right-mobile-toggle {
+    display: none;
+    background: white;
+    border: 1px solid #d6dbe1;
+    padding: 6px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    cursor: pointer; color: #0b0d10;
+    font-weight: 600;
+  }
+  @media (max-width: 900px) {
+    #app {
+      grid-template-columns: 0px 1fr 0px !important;
+      grid-template-areas:
+        "header header header"
+        "stage  stage  stage"
+        "tools  tools  tools" !important;
+    }
+    #left-sidebar, #right-sidebar {
+      position: fixed;
+      top: 52px; bottom: 60px;
+      width: 260px;
+      box-shadow: 0 0 30px rgba(0,0,0,0.22);
+      background: rgba(248,250,253,0.99);
+    }
+    #left-sidebar { left: -270px; transition: left 200ms ease; }
+    #right-sidebar { right: -270px; transition: right 200ms ease; }
+    #app.left-open #left-sidebar { left: 0; }
+    #app.right-open #right-sidebar { right: 0; }
+    #left-collapse, #right-collapse { display: none !important; }
+    #left-mobile-toggle, #right-mobile-toggle { display: inline-block !important; }
+    body header { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 8px !important; }
+    body #ai-launcher { bottom: 64px !important; right: 12px !important; padding: 9px 13px !important; font-size: 12px !important; }
+    body #ai-chat-panel { bottom: 110px !important; right: 8px !important; left: 8px !important; width: auto !important; }
+    body #toolbar { padding: 6px 8px !important; }
+    body #toolbar button, body #toolbar label, body #toolbar select { padding: 6px 8px !important; font-size: 11px !important; }
+  }
+</style>
+
+<button id="left-collapse" class="sb-collapse-btn" title="Hide tools panel" aria-label="Hide tools panel">‹</button>
+<button id="right-collapse" class="sb-collapse-btn" title="Hide properties panel" aria-label="Hide properties panel">›</button>
+
+<aside id="left-sidebar" role="complementary" aria-label="Tools">
+  <div class="sb-tabs" role="tablist">
+    <button data-tab="shapes" class="active" role="tab" aria-selected="true">Shapes</button>
+    <button data-tab="templates" role="tab" aria-selected="false">Templates</button>
+    <button data-tab="camera" role="tab" aria-selected="false">Camera</button>
+  </div>
+  <div class="sb-panels">
+    <div class="sb-panel active" data-panel="shapes" role="tabpanel">
+      <h4>Add a shape</h4>
+      <div id="left-shapes-slot"></div>
+      <h4 style="margin-top:14px">Quick colors</h4>
+      <div id="left-colors-slot"></div>
+    </div>
+    <div class="sb-panel" data-panel="templates" role="tabpanel">
+      <h4>Start from a template</h4>
+      <div id="left-templates-slot"></div>
+    </div>
+    <div class="sb-panel" data-panel="camera" role="tabpanel">
+      <h4>View</h4>
+      <div id="left-camera-slot"></div>
+      <h4 style="margin-top:14px">History</h4>
+      <div id="left-history-slot"></div>
+    </div>
+  </div>
+</aside>
+
+<aside id="right-sidebar" role="complementary" aria-label="Properties">
+  <div class="sb-tabs" role="tablist">
+    <button data-tab="objects" class="active" role="tab" aria-selected="true">Objects</button>
+    <button data-tab="props" role="tab" aria-selected="false">Edit</button>
+    <button data-tab="ref" role="tab" aria-selected="false">Image</button>
+  </div>
+  <div class="sb-panels">
+    <div class="sb-panel active" data-panel="objects" role="tabpanel">
+      <h4>Size in mm</h4>
+      <div id="right-size-slot"></div>
+      <h4 style="margin-top:14px">Scene Objects</h4>
+      <div id="right-objects-slot"></div>
+    </div>
+    <div class="sb-panel" data-panel="props" role="tabpanel">
+      <div id="right-edit-slot"></div>
+    </div>
+    <div class="sb-panel" data-panel="ref" role="tabpanel">
+      <h4>Reference Image</h4>
+      <div id="right-ref-slot"></div>
+    </div>
+  </div>
+</aside>
+
+<script>
+(function setupV8Layout() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const moves = [
+    ['shape-palette', 'left-shapes-slot'],
+    ['color-chips', 'left-colors-slot'],
+    ['templates', 'left-templates-slot'],
+    ['cam-bar', 'left-camera-slot'],
+    ['history-panel', 'left-history-slot'],
+    ['size-readout', 'right-size-slot'],
+    ['objects-panel', 'right-objects-slot'],
+    ['edit-panel', 'right-edit-slot'],
+  ];
+  moves.forEach(([fromId, toId]) => {
+    const src = document.getElementById(fromId);
+    const tgt = document.getElementById(toId);
+    if (src && tgt) tgt.appendChild(src);
+  });
+  const ep = document.getElementById('edit-panel');
+  if (ep) { ep.classList.add('show'); ep.style.display = 'block'; }
+  const hp = document.getElementById('history-panel');
+  if (hp) hp.style.display = 'block';
+  const refBody = document.getElementById('ref-body');
+  const refSlot = document.getElementById('right-ref-slot');
+  if (refBody && refSlot) refSlot.appendChild(refBody);
+
+  function bindTabs(sidebarId) {
+    const sb = document.getElementById(sidebarId);
+    if (!sb) return;
+    sb.querySelectorAll('.sb-tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sb.querySelectorAll('.sb-tabs button').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
+        btn.classList.add('active'); btn.setAttribute('aria-selected','true');
+        const t = btn.dataset.tab;
+        sb.querySelectorAll('.sb-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      });
+    });
+  }
+  bindTabs('left-sidebar');
+  bindTabs('right-sidebar');
+
+  const lc = document.getElementById('left-collapse');
+  const rc = document.getElementById('right-collapse');
+  const isMobile = () => window.innerWidth <= 900;
+  function refreshLabels() {
+    if (lc) lc.textContent = app.classList.contains('left-collapsed') ? '›' : '‹';
+    if (rc) rc.textContent = app.classList.contains('right-collapsed') ? '‹' : '›';
+  }
+  if (lc) lc.addEventListener('click', () => {
+    if (isMobile()) { app.classList.toggle('left-open'); app.classList.remove('right-open'); }
+    else app.classList.toggle('left-collapsed');
+    refreshLabels();
+  });
+  if (rc) rc.addEventListener('click', () => {
+    if (isMobile()) { app.classList.toggle('right-open'); app.classList.remove('left-open'); }
+    else app.classList.toggle('right-collapsed');
+    refreshLabels();
+  });
+
+  const header = document.querySelector('#app > header');
+  if (header) {
+    const leftBtn = document.createElement('button');
+    leftBtn.id = 'left-mobile-toggle';
+    leftBtn.textContent = '☰ Tools';
+    leftBtn.addEventListener('click', () => { app.classList.toggle('left-open'); app.classList.remove('right-open'); });
+    const rightBtn = document.createElement('button');
+    rightBtn.id = 'right-mobile-toggle';
+    rightBtn.textContent = 'Props ☰';
+    rightBtn.addEventListener('click', () => { app.classList.toggle('right-open'); app.classList.remove('left-open'); });
+    header.insertBefore(leftBtn, header.firstChild);
+    header.appendChild(rightBtn);
+  }
+
+  const tb = document.getElementById('toolbar');
+  if (tb) {
+    const fileLabel = tb.querySelector('label[for="fileinput"]');
+    if (fileLabel) fileLabel.id = 'fileinput-label';
+    const groups = [
+      ['fileinput-label', 'btn-download', 'btn-export-stl'],
+      ['save-slot', 'btn-save', 'btn-load', 'btn-export-project'],
+      ['btn-undo', 'btn-redo', 'btn-history'],
+      ['btn-duplicate', 'btn-delete', 'btn-edit'],
+      ['btn-hole', 'btn-merge', 'btn-group', 'btn-ungroup'],
+      ['btn-align-x', 'btn-align-y', 'btn-align-z'],
+      ['btn-mirror-x', 'btn-mirror-y', 'btn-mirror-z', 'btn-snap'],
+      ['btn-reset', 'btn-fit', 'btn-wire', 'btn-spin', 'btn-bg'],
+      ['btn-mute', 'btn-help'],
+    ];
+    const fileInput = tb.querySelector('#fileinput');
+    const colorSwatches = Array.from(tb.querySelectorAll('.color-swatch'));
+    const frag = document.createDocumentFragment();
+    if (fileInput) frag.appendChild(fileInput);
+    groups.forEach((idsInGroup, gi) => {
+      if (gi > 0) {
+        const sep = document.createElement('span'); sep.className = 'group-sep';
+        frag.appendChild(sep);
+      }
+      idsInGroup.forEach(id => {
+        const el = tb.querySelector('#' + id);
+        if (el) frag.appendChild(el);
+      });
+    });
+    if (colorSwatches.length) {
+      const sep = document.createElement('span'); sep.className = 'group-sep';
+      frag.appendChild(sep);
+      colorSwatches.forEach(s => frag.appendChild(s));
+    }
+    tb.innerHTML = '';
+    tb.appendChild(frag);
+  }
+
+  document.addEventListener('click', e => {
+    if (!isMobile()) return;
+    const inLeft = e.target.closest('#left-sidebar');
+    const inRight = e.target.closest('#right-sidebar');
+    if (inLeft && e.target.closest('button:not(.sb-tabs button)') && !e.target.closest('.sb-tabs')) {
+      setTimeout(() => app.classList.remove('left-open'), 200);
+    }
+    if (inRight && e.target.closest('button:not(.sb-tabs button)') && !e.target.closest('.sb-tabs')) {
+      setTimeout(() => app.classList.remove('right-open'), 200);
+    }
+  });
+  refreshLabels();
+})();
+</script>
 </body>
 </html>
