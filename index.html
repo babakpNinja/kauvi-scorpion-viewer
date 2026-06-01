@@ -138,11 +138,54 @@
     transition: opacity 200ms ease;
   }
   #status.show { opacity:1; }
+  #edit-panel {
+    position:absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    right: 14px;
+    width: 240px;
+    background: rgba(17, 21, 26, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+    z-index:6;
+    color:var(--text);
+    font-size:12px;
+    display:none;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  #edit-panel.show { display:block; }
+  #edit-panel h3 {
+    margin:0 0 8px 0; font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--accent); font-weight:600;
+  }
+  #edit-panel .row { display:flex; align-items:center; gap:6px; margin:6px 0; }
+  #edit-panel .row label { flex: 0 0 60px; color:var(--muted); }
+  #edit-panel .row input[type="range"] { flex:1; height:20px; }
+  #edit-panel .row input[type="color"] { width:36px; height:24px; border:1px solid var(--line); border-radius:4px; background:transparent; cursor:pointer; }
+  #edit-panel .row input[type="number"] { width:48px; padding:2px 4px; background:#0b0d10; color:var(--text); border:1px solid var(--line); border-radius:4px; font-size:11px; }
+  #edit-panel .grp { border-top:1px solid var(--line); padding-top:8px; margin-top:8px; }
+  #edit-panel .grp:first-of-type { border-top:0; padding-top:0; margin-top:0; }
+  #edit-panel .mode-btns { display:flex; gap:4px; margin:4px 0; }
+  #edit-panel .mode-btns button {
+    flex:1; padding:5px 4px; font-size:11px; background:transparent; color:var(--text);
+    border:1px solid var(--line); border-radius:6px; cursor:pointer;
+  }
+  #edit-panel .mode-btns button.active { border-color:var(--accent); color:var(--accent); }
+  #edit-panel .apply-row { display:flex; gap:6px; margin-top:10px; }
+  #edit-panel .apply-row button {
+    flex:1; padding:8px; background:transparent; color:var(--text);
+    border:1px solid var(--line); border-radius:8px; cursor:pointer; font-size:12px;
+  }
+  #edit-panel .apply-row button.primary { border-color:var(--accent); color:var(--accent); }
   @media (max-width: 480px) {
     #info { display:none; }
     header h1 { font-size:13px; }
     #toolbar { gap:4px; padding:4px; border-radius:12px; }
     #toolbar button, #toolbar label { padding:8px 10px; font-size:12px; }
+    #edit-panel { width: calc(100vw - 28px); right: 14px; top: calc(env(safe-area-inset-top, 0px) + 48px); }
   }
 </style>
 </head>
@@ -160,6 +203,31 @@
       <b>Drop</b> an .stl file anywhere to load it.
     </div>
     <div id="status"></div>
+    <div id="edit-panel">
+      <h3>✎ Live Edit</h3>
+      <div class="grp">
+        <div class="mode-btns" id="gizmo-modes">
+          <button data-mode="translate" class="active">Move</button>
+          <button data-mode="rotate">Rotate</button>
+          <button data-mode="scale">Scale</button>
+        </div>
+        <div style="font-size:10px; color:var(--muted); margin-top:4px;">Drag the gizmo arrows on the model.</div>
+      </div>
+      <div class="grp">
+        <div class="row"><label>Color</label><input type="color" id="mat-color" value="#9aa4af"></div>
+        <div class="row"><label>Metal</label><input type="range" id="mat-metal" min="0" max="1" step="0.01" value="0.85"></div>
+        <div class="row"><label>Rough</label><input type="range" id="mat-rough" min="0" max="1" step="0.01" value="0.28"></div>
+        <div class="row"><label>Glow</label><input type="range" id="mat-emiss" min="0" max="1.5" step="0.01" value="0.35"></div>
+        <div class="row"><label>Emit</label><input type="color" id="mat-emiss-color" value="#0a3a35"></div>
+      </div>
+      <div class="grp">
+        <div class="row"><label>Uniform</label><input type="range" id="uni-scale" min="0.2" max="3" step="0.01" value="1"></div>
+      </div>
+      <div class="apply-row">
+        <button id="btn-bake" class="primary" title="Bake transform into geometry so Download includes the edit">Apply</button>
+        <button id="btn-undo" title="Revert to original loaded mesh">Reset</button>
+      </div>
+    </div>
     <div id="toolbar">
       <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
       <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
@@ -292,6 +360,18 @@ let spinning = false;
 let wireframe = false;
 let currentBuffer = null;     // last-loaded STL bytes for download
 let currentName = 'model.stl';
+let originalGeometry = null;  // pristine geometry for Reset
+let editMode = false;
+
+// Transform gizmo (lazy-attached on edit mode)
+const transformControls = new TransformControls(camera, renderer.domElement);
+transformControls.setSize(0.8);
+transformControls.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+scene.add(transformControls);
+transformControls.visible = false;
+transformControls.enabled = false;
+
+const stlExporter = new STLExporter();
 
 function setStatus(text, holdMs=1800) {
   statusEl.textContent = text;
@@ -312,7 +392,8 @@ function loadFromArrayBuffer(buf, label='model') {
   geom.computeBoundingSphere();
   const r = geom.boundingSphere.radius;
 
-  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); transformControls.detach(); }
+  originalGeometry = geom.clone();   // stash pristine copy for Reset
   mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = false;
@@ -320,6 +401,7 @@ function loadFromArrayBuffer(buf, label='model') {
   // Default three: +Y up, -Z forward. Our model has +Z up, so rotate -X 90°.
   mesh.rotation.x = -Math.PI / 2;
   scene.add(mesh);
+  if (editMode) { transformControls.attach(mesh); transformControls.visible = true; transformControls.enabled = true; }
 
   // Reposition ground at bottom of bounding box
   const bbox = new THREE.Box3().setFromObject(mesh);
@@ -403,17 +485,107 @@ document.getElementById('btn-bg').addEventListener('click', ()=>{
   applyBg();
 });
 document.getElementById('btn-download').addEventListener('click', ()=>{
-  if (!currentBuffer) { setStatus('Nothing to download yet', 1800); return; }
-  const blob = new Blob([currentBuffer], { type: 'model/stl' });
+  if (!mesh) { setStatus('Nothing to download yet', 1800); return; }
+  // Export the CURRENT mesh state (includes any baked edits).
+  // If user hasn't baked edits, this still exports the original orientation+geometry.
+  const binary = stlExporter.parse(mesh, { binary: true });
+  const blob = new Blob([binary], { type: 'model/stl' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = currentName;
+  a.download = currentName.replace(/\.stl$/i, '') + '_edited.stl';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  setStatus('Downloading ' + currentName, 1500);
+  setStatus('Downloading ' + a.download, 1500);
+});
+
+// === EDIT MODE ===
+const editPanel = document.getElementById('edit-panel');
+document.getElementById('btn-edit').addEventListener('click', e=>{
+  editMode = !editMode;
+  e.currentTarget.classList.toggle('primary', editMode);
+  editPanel.classList.toggle('show', editMode);
+  if (editMode && mesh) {
+    transformControls.attach(mesh);
+    transformControls.visible = true;
+    transformControls.enabled = true;
+    setStatus('Edit mode ON. Drag the gizmo to transform.', 2200);
+  } else {
+    transformControls.detach();
+    transformControls.visible = false;
+    transformControls.enabled = false;
+  }
+});
+
+// Gizmo mode buttons
+document.querySelectorAll('#gizmo-modes button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#gizmo-modes button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    transformControls.setMode(btn.dataset.mode);
+  });
+});
+
+// Material sliders
+const matColor = document.getElementById('mat-color');
+const matMetal = document.getElementById('mat-metal');
+const matRough = document.getElementById('mat-rough');
+const matEmiss = document.getElementById('mat-emiss');
+const matEmissColor = document.getElementById('mat-emiss-color');
+matColor.addEventListener('input', e => mat.color = new THREE.Color(e.target.value));
+matMetal.addEventListener('input', e => mat.metalness = +e.target.value);
+matRough.addEventListener('input', e => mat.roughness = +e.target.value);
+matEmiss.addEventListener('input', e => mat.emissiveIntensity = +e.target.value);
+matEmissColor.addEventListener('input', e => mat.emissive = new THREE.Color(e.target.value));
+
+// Uniform scale (applied to mesh.scale, baked on Apply)
+const uniScale = document.getElementById('uni-scale');
+uniScale.addEventListener('input', e => {
+  if (!mesh) return;
+  const s = +e.target.value;
+  // Multiplicative on top of any current gizmo scale.
+  // For simplicity: set mesh.scale.x/y/z to s, but preserve sign per axis.
+  const sgnX = Math.sign(mesh.scale.x) || 1;
+  const sgnY = Math.sign(mesh.scale.y) || 1;
+  const sgnZ = Math.sign(mesh.scale.z) || 1;
+  mesh.scale.set(s * sgnX, s * sgnY, s * sgnZ);
+});
+
+// Apply: bake current transform into the geometry so Download exports it
+document.getElementById('btn-bake').addEventListener('click', ()=>{
+  if (!mesh) return;
+  mesh.updateMatrix();
+  const g = mesh.geometry.clone();
+  g.applyMatrix4(mesh.matrix);
+  mesh.geometry.dispose();
+  mesh.geometry = g;
+  mesh.position.set(0, 0, 0);
+  mesh.rotation.set(0, 0, 0);
+  mesh.scale.set(1, 1, 1);
+  mesh.updateMatrix();
+  uniScale.value = 1;
+  triCount.textContent = (g.attributes.position.count / 3 | 0).toLocaleString() + ' tris · ' + currentName + ' (edited)';
+  setStatus('Baked. Download now exports the edit.', 2000);
+});
+
+// Reset: restore pristine geometry + default material values + identity transform
+document.getElementById('btn-undo').addEventListener('click', ()=>{
+  if (!mesh || !originalGeometry) return;
+  mesh.geometry.dispose();
+  mesh.geometry = originalGeometry.clone();
+  mesh.position.set(0, 0, 0);
+  mesh.rotation.x = -Math.PI / 2; mesh.rotation.y = 0; mesh.rotation.z = 0;
+  mesh.scale.set(1, 1, 1);
+  uniScale.value = 1;
+  matColor.value = '#9aa4af'; mat.color = new THREE.Color(0x9aa4af);
+  matMetal.value = 0.85; mat.metalness = 0.85;
+  matRough.value = 0.28; mat.roughness = 0.28;
+  matEmiss.value = 0.35; mat.emissiveIntensity = 0.35;
+  matEmissColor.value = '#0a3a35'; mat.emissive = new THREE.Color(0x0a3a35);
+  triCount.textContent = (mesh.geometry.attributes.position.count / 3 | 0).toLocaleString() + ' tris · ' + currentName;
+  setStatus('Reset to original', 1500);
 });
 
 // Resize
