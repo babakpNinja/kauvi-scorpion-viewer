@@ -241,6 +241,289 @@
   /* If edit panel is shown, push cam-bar down */
   #edit-panel.show ~ #cam-bar { display:none; }
 
+  /* ===== v8: NEW SIDEBAR LAYOUT ===== */
+  :root {
+    --sb-w: 224px;
+    --sb-bg: rgba(255,255,255,0.96);
+    --sb-border: #d0d6dd;
+    --sb-text: #0b0d10;
+    --sb-muted: #6b7280;
+    --sb-shadow: 0 6px 18px rgba(0,0,0,0.10);
+    --sb-radius: 12px;
+    --sb-acc: #7c5cff;
+    --sb-acc2: #39e1c4;
+  }
+  /* Sidebars: fixed left/right columns with tabs */
+  .sidebar {
+    position: absolute;
+    top: 56px;
+    bottom: 88px;
+    width: var(--sb-w);
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    background: var(--sb-bg);
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+    box-shadow: var(--sb-shadow);
+    overflow: hidden;
+    color: var(--sb-text);
+    font-family: -apple-system, system-ui, sans-serif;
+    transition: width 180ms ease, transform 180ms ease;
+  }
+  #layout-left { left: 14px; }
+  #layout-right { right: 14px; }
+  .sb-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--sb-border);
+    background: #f3f6fa;
+    flex-shrink: 0;
+  }
+  .sb-tabs button {
+    flex: 1;
+    appearance: none;
+    background: transparent;
+    color: var(--sb-muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 120ms, border-color 120ms, background 120ms;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .sb-tabs button:hover { background: white; color: var(--sb-text); }
+  .sb-tabs button.active {
+    color: var(--sb-acc);
+    border-bottom-color: var(--sb-acc);
+    background: white;
+  }
+  .sb-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+  .sb-pane { display: none; }
+  .sb-pane.active { display: block; }
+  .sb-title {
+    font-size: 10px;
+    color: var(--sb-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 4px 0 8px 0;
+    font-weight: 600;
+  }
+  .sb-collapse {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 20px; height: 56px;
+    background: var(--sb-bg);
+    border: 1px solid var(--sb-border);
+    color: var(--sb-muted);
+    cursor: pointer;
+    font-size: 11px;
+    z-index: 8;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #left-collapse { left: calc(14px + var(--sb-w) - 1px); border-radius: 0 6px 6px 0; }
+  #right-collapse { right: calc(14px + var(--sb-w) - 1px); border-radius: 6px 0 0 6px; }
+  .sidebar.collapsed { width: 0; border-color: transparent; pointer-events: none; box-shadow: none; }
+  #layout-left.collapsed + #left-collapse { left: 14px; }
+  #layout-right.collapsed ~ #right-collapse { right: 14px; }
+
+  /* Override floating panels to live INSIDE sidebars (position static, full width) */
+  #shape-palette, #templates, #cam-bar,
+  #objects-panel, #size-readout, #edit-panel, #ref-panel-inline {
+    position: static !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 0 6px 0 !important;
+    backdrop-filter: none !important;
+    max-height: none !important;
+    width: auto !important;
+    min-width: 0 !important;
+    color: var(--sb-text) !important;
+  }
+  /* Shape palette inside sidebar: 4-col grid */
+  #shape-palette {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+  }
+  #shape-palette button {
+    width: 100%; height: 44px;
+    background: white !important; color: var(--sb-text) !important;
+    border: 1px solid var(--sb-border) !important;
+    border-radius: 8px !important;
+    font-size: 18px;
+  }
+  #shape-palette button:hover { background: #eef2f5 !important; border-color: var(--sb-acc) !important; }
+  /* Templates: full-width vertical buttons */
+  #templates {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+  #templates .label { display: none; }
+  #templates button {
+    width: 100% !important;
+    text-align: left !important;
+    background: white !important;
+    border: 1px solid var(--sb-border) !important;
+    color: var(--sb-text) !important;
+    padding: 7px 10px !important;
+    border-radius: 7px !important;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  #templates button:hover { background: #eef2f5 !important; transform: translateY(-1px); }
+  /* Camera bar */
+  #cam-bar {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 4px !important;
+  }
+  #cam-bar .row { display: contents !important; }
+  #cam-bar button {
+    width: 100% !important;
+    background: white !important;
+    color: var(--sb-text) !important;
+    border: 1px solid var(--sb-border) !important;
+    border-radius: 6px !important;
+    padding: 6px 4px !important;
+    font-size: 11px !important;
+    min-width: 0 !important;
+  }
+  #cam-bar button:hover { background: #eef2f5 !important; border-color: var(--sb-acc) !important; }
+  #cam-bar #btn-ortho, #cam-bar #btn-grid-toggle { grid-column: span 2; background: #f3f6fa !important; }
+  /* Objects panel inside sidebar */
+  #objects-panel .label { display: none; }
+  #objects-list { display: flex; flex-direction: column; gap: 3px; }
+  /* Size readout block in sidebar */
+  #size-readout {
+    font-family: ui-monospace, SF Mono, monospace !important;
+    font-size: 12px !important;
+  }
+  #size-readout .label {
+    font-family: -apple-system, sans-serif !important;
+    color: var(--sb-muted) !important;
+    margin-bottom: 4px;
+  }
+  #size-readout .row {
+    display: flex; justify-content: space-between;
+    padding: 2px 6px;
+    background: #f3f6fa;
+    border-radius: 4px;
+    margin: 2px 0;
+  }
+  #size-readout .row b { color: var(--sb-text); font-weight: 600; }
+  #size-readout .row span { color: #1f6aa5; }
+  #size-readout .scene { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--sb-border); }
+  /* Edit panel inside sidebar (always show inside right sidebar) */
+  #edit-panel { color: var(--sb-text) !important; display: block !important; }
+  #edit-panel h3 { color: var(--sb-acc) !important; margin: 4px 0 8px 0 !important; font-size: 11px !important; }
+  #edit-panel .row label { color: var(--sb-muted) !important; }
+  #edit-panel .row input[type="number"] { background: white !important; color: var(--sb-text) !important; border-color: var(--sb-border) !important; }
+  #edit-panel .grp { border-top-color: var(--sb-border) !important; }
+  #edit-panel .mode-btns button { background: white !important; color: var(--sb-text) !important; border-color: var(--sb-border) !important; }
+  #edit-panel .mode-btns button.active { border-color: var(--sb-acc) !important; color: var(--sb-acc) !important; background: #eef2f5 !important; }
+  #edit-panel .apply-row button { background: white !important; color: var(--sb-text) !important; border-color: var(--sb-border) !important; }
+  /* Reference image inline */
+  #ref-panel-inline #ref-image-wrap { aspect-ratio: 1/1; background: #f0f3f6; border: 1px dashed var(--sb-border); border-radius: 10px; display:flex; align-items:center; justify-content:center; color: var(--sb-muted); font-size: 12px; text-align: center; padding: 8px; overflow: hidden; }
+  #ref-panel-inline #ref-image-wrap img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+  #ref-panel-inline #ref-prompt-shown { font-size: 10px; color: var(--sb-muted); font-style: italic; margin: 4px 0; }
+  #ref-panel-inline #ref-input-row { display: flex; gap: 4px; margin-top: 6px; }
+  #ref-panel-inline #ref-input { flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--sb-border); border-radius: 7px; background: white; color: var(--sb-text); }
+  #ref-panel-inline #ref-gen { background: linear-gradient(135deg, #f97316, #ec4899); color: white; border: none; padding: 0 10px; border-radius: 7px; font-weight: 700; cursor: pointer; font-size: 12px; }
+  /* Hide the originally floating launchers/panels we've absorbed */
+  #ref-launcher { display: none !important; }
+  #ref-panel { display: none !important; }
+  /* Reorganized toolbar: groups separated visually */
+  #toolbar {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+    background: rgba(255,255,255,0.96) !important;
+    border: 1px solid var(--sb-border) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--sb-shadow) !important;
+    padding: 6px !important;
+    max-width: calc(100vw - 28px) !important;
+    overflow-x: auto !important;
+    gap: 4px !important;
+    display: flex !important;
+    align-items: center;
+  }
+  #toolbar button, #toolbar label {
+    background: transparent !important;
+    color: var(--sb-text) !important;
+    border: 1px solid transparent !important;
+    padding: 7px 9px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+  #toolbar button:hover, #toolbar label:hover { background: #eef2f5 !important; border-color: var(--sb-border) !important; }
+  #toolbar button.primary, #toolbar button.primary:hover {
+    color: var(--sb-acc) !important;
+    border-color: var(--sb-acc) !important;
+    background: rgba(124,92,255,0.06) !important;
+  }
+  #toolbar .tb-sep { width: 1px; height: 22px; background: var(--sb-border); margin: 0 2px; flex: 0 0 1px; }
+  #toolbar .color-swatch {
+    background: white !important;
+    border: 1px solid var(--sb-border) !important;
+    color: var(--sb-text) !important;
+    padding: 4px 6px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+  }
+  #toolbar .color-swatch span { color: var(--sb-muted) !important; }
+  #toolbar #save-slot {
+    background: white !important;
+    color: var(--sb-text) !important;
+    border: 1px solid var(--sb-border) !important;
+    border-radius: 8px !important;
+    padding: 7px 8px !important;
+    font-size: 11px !important;
+    cursor: pointer;
+  }
+  /* Hide info card (Tinkercad-style help is in welcome dialog) */
+  #info { display: none !important; }
+  /* Status banner: center bottom above toolbar */
+  #status {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    top: auto !important;
+    bottom: 70px !important;
+    background: rgba(255,255,255,0.96) !important;
+    border: 1px solid var(--sb-border) !important;
+    color: var(--sb-text) !important;
+    box-shadow: var(--sb-shadow) !important;
+  }
+  /* AI launcher stays floating - adjust position to avoid toolbar */
+  #ai-launcher { bottom: 86px !important; right: 14px !important; }
+  #ai-chat-panel { bottom: 86px !important; }
+
+  /* Mobile/tablet adjustments */
+  @media (max-width: 1024px) {
+    :root { --sb-w: 196px; }
+    .sidebar { top: 50px; bottom: 78px; }
+  }
+  @media (max-width: 760px) {
+    .sidebar { top: 48px; bottom: 70px; width: 50vw; }
+    #layout-left { left: 6px; }
+    #layout-right { right: 6px; }
+    #left-collapse, #right-collapse { display: none; }
+    .sb-tabs button { font-size: 10px; padding: 6px 2px; }
+    #shape-palette { grid-template-columns: repeat(3, 1fr) !important; }
+    #toolbar { font-size: 10px !important; gap: 2px !important; padding: 4px !important; }
+    #toolbar button, #toolbar label { padding: 5px 6px !important; font-size: 10px !important; }
+    #ai-launcher { bottom: 78px !important; right: 8px !important; padding: 8px 12px !important; font-size: 12px !important; }
+    #ai-chat-panel { bottom: 78px !important; right: 8px !important; left: 8px !important; width: auto !important; height: 60vh !important; }
+  }
+
   .kid-modal {
     position:absolute; inset:0; background: rgba(0,0,0,0.55);
     display:none; align-items:center; justify-content:center; z-index:50;
@@ -623,6 +906,36 @@
   </header>
   <div id="stage">
     <div id="dropzone"></div>
+    <!-- v8: left sidebar (Shapes / Templates / Camera) -->
+    <aside id="layout-left" class="sidebar">
+      <div class="sb-tabs" role="tablist">
+        <button data-tab="shapes" class="active" role="tab">⚪ Shapes</button>
+        <button data-tab="templates" role="tab">🎨 Templates</button>
+        <button data-tab="camera" role="tab">📷 Camera</button>
+      </div>
+      <div class="sb-body">
+        <div class="sb-pane active" data-pane="shapes" id="pane-shapes"></div>
+        <div class="sb-pane" data-pane="templates" id="pane-templates"></div>
+        <div class="sb-pane" data-pane="camera" id="pane-camera"></div>
+      </div>
+    </aside>
+    <button id="left-collapse" title="Collapse sidebar">◀</button>
+    <!-- v8: right sidebar (Objects / Properties / Reference) -->
+    <aside id="layout-right" class="sidebar">
+      <div class="sb-tabs" role="tablist">
+        <button data-tab="objects" class="active" role="tab">📋 Objects</button>
+        <button data-tab="properties" role="tab">⚙ Edit</button>
+        <button data-tab="reference" role="tab">📸 Reference</button>
+      </div>
+      <div class="sb-body">
+        <div class="sb-pane active" data-pane="objects" id="pane-objects"></div>
+        <div class="sb-pane" data-pane="properties" id="pane-properties"></div>
+        <div class="sb-pane" data-pane="reference" id="pane-reference">
+          <div id="ref-panel-inline"></div>
+        </div>
+      </div>
+    </aside>
+    <button id="right-collapse" title="Collapse sidebar">▶</button>
     <div id="size-readout" title="Real-world size in mm (1 unit = 1 mm)">
       <div class="label">Selected size</div>
       <div class="row"><b>W</b><span id="sz-w">—</span></div>
@@ -801,45 +1114,52 @@
       </div>
     </div>
     <div id="toolbar">
-      <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
-      <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
-      <button id="btn-undo" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
-      <button id="btn-redo" title="Redo (Cmd/Ctrl+Shift+Z)" disabled>↷ Redo</button>
-      <button id="btn-history" title="Show edit history">📜 History</button>
-      <button id="btn-download" title="Download current STL for 3D printing">⬇ Download</button>
-      <button id="btn-edit" title="Toggle edit panel">✎ Edit</button>
+      <label for="fileinput" title="Load a .stl file">📁 Open</label>
+      <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl,.json,.kauvi.json">
+      <button id="btn-download" title="Download current STL for 3D printing">⬇ STL</button>
+      <span class="tb-sep"></span>
+      <button id="btn-undo" title="Undo (Cmd/Ctrl+Z)" disabled>↶</button>
+      <button id="btn-redo" title="Redo (Cmd/Ctrl+Shift+Z)" disabled>↷</button>
+      <button id="btn-history" title="Show edit history">📜</button>
+      <span class="tb-sep"></span>
       <label class="color-swatch" title="Model color"><input type="color" id="qc-model" value="#9aa4af"><span>Model</span></label>
       <label class="color-swatch" title="Background color"><input type="color" id="qc-bg" value="#0b0d10"><span>Bg</span></label>
       <label class="color-swatch" title="Glow color"><input type="color" id="qc-glow" value="#0a3a35"><span>Glow</span></label>
-      <button id="btn-reset">↺ Reset</button>
-      <button id="btn-wire">▒ Wireframe</button>
-      <button id="btn-spin" class="primary">↻ Spin</button>
-      <button id="btn-fit">⊕ Fit</button>
-      <button id="btn-bg">◐ Preset</button>
-      <button id="btn-duplicate" title="Duplicate selected (D)">⎘ Copy</button>
-      <button id="btn-mirror-x" title="Mirror across X axis">↔ MirrorX</button>
-      <button id="btn-mirror-y" title="Mirror across Y axis">↕ MirrorY</button>
-      <button id="btn-mirror-z" title="Mirror across Z axis">⤧ MirrorZ</button>
-      <button id="btn-snap" title="Snap to grid (5 unit)">⊞ Snap</button>
-      <button id="btn-delete" title="Delete selected (Del)">🗑 Delete</button>
-      <button id="btn-group" title="Group selected (Cmd/Ctrl+G)">🔗 Group</button>
-      <button id="btn-ungroup" title="Ungroup selected (Cmd/Ctrl+Shift+G)">✂ Ungroup</button>
-      <button id="btn-hole" title="Mark selected as Hole — will be subtracted on Merge">🕳 Hole</button>
-      <button id="btn-merge" title="Merge selected: combine solids and subtract holes (CSG)">🔨 Merge</button>
-      <button id="btn-align-x" title="Align selected on X (line them up sideways)">⫶ AlignX</button>
-      <button id="btn-align-y" title="Align selected on Y (line them up vertically)">⫶ AlignY</button>
-      <button id="btn-align-z" title="Align selected on Z (line them up depth)">⫶ AlignZ</button>
-      <button id="btn-mute" title="Mute / unmute sound effects">🔊</button>
-      <button id="btn-export-stl" title="Export full scene as printable STL">🖨 Print STL</button>
+      <span class="tb-sep"></span>
+      <button id="btn-reset" title="Reset view">↺</button>
+      <button id="btn-wire" title="Wireframe">▒</button>
+      <button id="btn-spin" class="primary" title="Spin">↻</button>
+      <button id="btn-fit" title="Fit to view">⊕</button>
+      <button id="btn-bg" title="Cycle background preset">◐</button>
+      <span class="tb-sep"></span>
+      <button id="btn-duplicate" title="Duplicate selected (D)">⎘</button>
+      <button id="btn-delete" title="Delete selected (Del)">🗑</button>
+      <button id="btn-mirror-x" title="Mirror across X axis">↔X</button>
+      <button id="btn-mirror-y" title="Mirror across Y axis">↕Y</button>
+      <button id="btn-mirror-z" title="Mirror across Z axis">⤧Z</button>
+      <span class="tb-sep"></span>
+      <button id="btn-group" title="Group selected (Cmd/Ctrl+G)">🔗</button>
+      <button id="btn-ungroup" title="Ungroup (Cmd/Ctrl+Shift+G)">✂</button>
+      <button id="btn-hole" title="Mark Hole (subtracted on Merge)">🕳 Hole</button>
+      <button id="btn-merge" title="Merge selected (Boolean union+subtract)">🔨 Merge</button>
+      <span class="tb-sep"></span>
+      <button id="btn-align-x" title="Align centers on X">⫶X</button>
+      <button id="btn-align-y" title="Align centers on Y">⫶Y</button>
+      <button id="btn-align-z" title="Align centers on Z">⫶Z</button>
+      <button id="btn-snap" title="Snap to grid (5mm, 15deg, 0.1)">⊞</button>
+      <span class="tb-sep"></span>
+      <button id="btn-export-stl" title="Export full scene as printable STL">🖨</button>
       <select id="save-slot" title="Pick a save slot">
         <option value="1">Slot 1</option>
         <option value="2">Slot 2</option>
         <option value="3">Slot 3</option>
       </select>
-      <button id="btn-save" title="Save project to this slot">💾 Save</button>
-      <button id="btn-load" title="Load this slot">📂 Load</button>
-      <button id="btn-export-project" title="Download as .kauvi.json">⬇ Project</button>
-      <button id="btn-help" title="Quick start guide">❓ Help</button>
+      <button id="btn-save" title="Save project to this slot">💾</button>
+      <button id="btn-load" title="Load this slot">📂</button>
+      <button id="btn-export-project" title="Download as .kauvi.json">⬇</button>
+      <span class="tb-sep"></span>
+      <button id="btn-mute" title="Mute / unmute sound effects">🔊</button>
+      <button id="btn-help" title="Quick start guide">❓</button>
     </div>
   </div>
 </div>
@@ -2642,10 +2962,13 @@ const refGen = document.getElementById('ref-gen');
 const refPromptShown = document.getElementById('ref-prompt-shown');
 const REF_KEY = 'kauvi-ref-image';
 
-function openRefPanel() { refPanel.classList.add('show'); refLauncher.style.display = 'none'; setTimeout(() => refInput.focus(), 100); }
-function closeRefPanel() { refPanel.classList.remove('show'); refLauncher.style.display = ''; }
-refLauncher.addEventListener('click', openRefPanel);
-refClose.addEventListener('click', closeRefPanel);
+function openRefPanel() {
+  if (window._openReferenceTab) window._openReferenceTab();
+  setTimeout(() => { const inp = document.getElementById('ref-input'); inp && inp.focus(); }, 120);
+}
+function closeRefPanel() { /* sidebar tab; no-op */ }
+if (refLauncher) refLauncher.addEventListener('click', openRefPanel);
+if (refClose) refClose.addEventListener('click', closeRefPanel);
 
 function loadLastRef() {
   try {
@@ -2699,6 +3022,89 @@ function submitRef() {
 }
 refGen.addEventListener('click', submitRef);
 refInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitRef(); }});
+
+
+// === V8: SIDEBAR LAYOUT — relocate existing panels into tabbed sidebars ===
+(function relocatePanels() {
+  const paneShapes = document.getElementById('pane-shapes');
+  const paneTemplates = document.getElementById('pane-templates');
+  const paneCamera = document.getElementById('pane-camera');
+  const paneObjects = document.getElementById('pane-objects');
+  const paneProperties = document.getElementById('pane-properties');
+  const refInline = document.getElementById('ref-panel-inline');
+
+  // Move shape-palette into shapes pane
+  const sp = document.getElementById('shape-palette');
+  if (sp && paneShapes) paneShapes.appendChild(sp);
+
+  // Move templates panel into templates pane
+  const tp = document.getElementById('templates');
+  if (tp && paneTemplates) paneTemplates.appendChild(tp);
+
+  // Move cam-bar into camera pane
+  const cb = document.getElementById('cam-bar');
+  if (cb && paneCamera) paneCamera.appendChild(cb);
+
+  // Move objects panel + size readout into objects pane
+  const sz = document.getElementById('size-readout');
+  if (sz && paneObjects) paneObjects.appendChild(sz);
+  const op = document.getElementById('objects-panel');
+  if (op && paneObjects) paneObjects.appendChild(op);
+
+  // Move edit-panel into properties pane (force visible since position is now sidebar)
+  const ep = document.getElementById('edit-panel');
+  if (ep && paneProperties) { paneProperties.appendChild(ep); ep.classList.add('show'); }
+
+  // Move reference panel's inner content into ref pane
+  const oldRef = document.getElementById('ref-panel');
+  if (oldRef && refInline) {
+    // Pull out the image wrap + prompt + input row from the original ref-panel
+    const wrap = document.getElementById('ref-image-wrap');
+    const promptShown = document.getElementById('ref-prompt-shown');
+    const inputRow = document.getElementById('ref-input-row');
+    if (wrap) refInline.appendChild(wrap);
+    if (promptShown) refInline.appendChild(promptShown);
+    if (inputRow) refInline.appendChild(inputRow);
+  }
+
+  // Tab switching
+  document.querySelectorAll('.sb-tabs').forEach(tabs => {
+    tabs.querySelectorAll('button[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        const sidebar = btn.closest('.sidebar');
+        sidebar.querySelectorAll('.sb-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        sidebar.querySelectorAll('.sb-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === target));
+      });
+    });
+  });
+
+  // Collapse buttons
+  const leftSb = document.getElementById('layout-left');
+  const rightSb = document.getElementById('layout-right');
+  const leftCol = document.getElementById('left-collapse');
+  const rightCol = document.getElementById('right-collapse');
+  if (leftCol) leftCol.addEventListener('click', () => {
+    leftSb.classList.toggle('collapsed');
+    leftCol.textContent = leftSb.classList.contains('collapsed') ? '▶' : '◀';
+  });
+  if (rightCol) rightCol.addEventListener('click', () => {
+    rightSb.classList.toggle('collapsed');
+    rightCol.textContent = rightSb.classList.contains('collapsed') ? '◀' : '▶';
+  });
+
+  // Make Edit button in toolbar toggle the Properties tab in right sidebar
+  const editBtn = document.getElementById('btn-edit');
+  if (editBtn) {
+    editBtn.style.display = 'none'; // Edit panel is always visible now
+  }
+
+  // When AI Chat returns showImage, ensure right sidebar Reference tab is active
+  window._openReferenceTab = function() {
+    const refTabBtn = document.querySelector('#layout-right .sb-tabs [data-tab="reference"]');
+    if (refTabBtn) refTabBtn.click();
+  };
+})();
 
 
 // === V7: CSG SOLID / HOLE / MERGE (three-bvh-csg) ===
