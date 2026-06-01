@@ -106,6 +106,18 @@
     color: var(--accent);
   }
   #toolbar input[type="file"] { display:none; }
+  #toolbar .color-swatch {
+    display:flex; align-items:center; gap:6px;
+    padding:4px 8px;
+    background: transparent; color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+    font-size: 12px; cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  #toolbar .color-swatch input[type="color"] {
+    width:22px; height:22px; padding:0; border:1px solid var(--line); border-radius:5px;
+    background:transparent; cursor:pointer;
+  }
+  #toolbar .color-swatch span { color: var(--muted); }
   #info {
     position:absolute;
     top: calc(env(safe-area-inset-top, 0px) + 56px);
@@ -247,12 +259,15 @@
       <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
       <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
       <button id="btn-download" title="Download current STL for 3D printing">⬇ Download</button>
-      <button id="btn-edit" title="Toggle edit mode">✎ Edit</button>
+      <button id="btn-edit" title="Toggle edit panel">✎ Edit</button>
+      <label class="color-swatch" title="Model color"><input type="color" id="qc-model" value="#9aa4af"><span>Model</span></label>
+      <label class="color-swatch" title="Background color"><input type="color" id="qc-bg" value="#0b0d10"><span>Bg</span></label>
+      <label class="color-swatch" title="Glow color"><input type="color" id="qc-glow" value="#0a3a35"><span>Glow</span></label>
       <button id="btn-reset">↺ Reset</button>
       <button id="btn-wire">▒ Wireframe</button>
       <button id="btn-spin" class="primary">↻ Spin</button>
       <button id="btn-fit">⊕ Fit</button>
-      <button id="btn-bg">◐ Bg</button>
+      <button id="btn-bg">◐ Preset</button>
     </div>
   </div>
 </div>
@@ -498,6 +513,26 @@ document.getElementById('btn-fit').addEventListener('click', ()=>{
 document.getElementById('btn-bg').addEventListener('click', ()=>{
   bgIdx = (bgIdx + 1) % bgPalette.length;
   applyBg();
+});
+
+// Quick color toolbar (always visible)
+const qcModel = document.getElementById('qc-model');
+const qcBg    = document.getElementById('qc-bg');
+const qcGlow  = document.getElementById('qc-glow');
+qcModel.addEventListener('input', e => {
+  mat.color = new THREE.Color(e.target.value);
+  const mc = document.getElementById('mat-color'); if (mc) mc.value = e.target.value;
+});
+qcBg.addEventListener('input', e => {
+  const c = new THREE.Color(e.target.value);
+  scene.background = c;
+  scene.fog = new THREE.Fog(c.getHex(), 400, 1400);
+  if (ground) ground.material.opacity = c.r + c.g + c.b > 1.8 ? 0.15 : 0.35;
+  const bc = document.getElementById('lt-bg-color'); if (bc) bc.value = e.target.value;
+});
+qcGlow.addEventListener('input', e => {
+  mat.emissive = new THREE.Color(e.target.value);
+  const mec = document.getElementById('mat-emiss-color'); if (mec) mec.value = e.target.value;
 });
 document.getElementById('btn-download').addEventListener('click', ()=>{
   if (!mesh) { setStatus('Nothing to download yet', 1800); return; }
