@@ -342,6 +342,69 @@
     #templates { top: auto; bottom: 80px; left: 8px; }
     #templates button { min-width: 80px; padding: 6px 10px; font-size: 11px; }
   }
+  /* === v4: Objects panel === */
+  #objects-panel {
+    position: absolute;
+    bottom: 80px;
+    left: 14px;
+    z-index: 6;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #d0d6dd;
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    min-width: 180px;
+    max-width: 230px;
+    max-height: 35vh;
+    overflow-y: auto;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  #objects-panel .label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #d0d6dd;
+  }
+  #objects-list { display: flex; flex-direction: column; gap: 3px; }
+  .obj-row {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #0b0d10;
+    background: transparent;
+    transition: background 80ms ease;
+  }
+  .obj-row:hover { background: #eef2f5; }
+  .obj-row.active { background: #d6efe6; border: 1px solid #39e1c4; padding: 3px 5px; }
+  .obj-row .vis {
+    appearance: none; background: transparent; border: none; cursor: pointer;
+    font-size: 13px; padding: 0 2px; line-height: 1;
+  }
+  .obj-row .name {
+    flex: 1; cursor: pointer; user-select: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 500;
+  }
+  .obj-row .name input {
+    width: 100%; font-size: 11px; padding: 1px 3px;
+    border: 1px solid #39e1c4; border-radius: 3px; background: white;
+  }
+  .obj-row .del {
+    appearance: none; background: transparent; border: none; cursor: pointer;
+    color: #9aa4af; font-size: 13px; padding: 0 4px; line-height: 1;
+  }
+  .obj-row .del:hover { color: #dc2626; }
+  .obj-row.locked .del { display: none; }
+  .obj-row.locked .name { color: #6b7280; font-style: italic; }
+  @media (max-width: 640px) {
+    #objects-panel { left: 8px; bottom: 140px; max-height: 25vh; min-width: 140px; }
+  }
   .kid-close { position:absolute; top:10px; right:14px; background:transparent; border:0; font-size:28px; color:#666; cursor:pointer; }
   .kid-steps { display:flex; flex-direction:column; gap:14px; margin:12px 0 18px 0; }
   .kid-step { display:flex; gap:14px; align-items:flex-start; }
@@ -409,6 +472,16 @@
       <button data-tmpl="house">🏠 House</button>
       <button data-tmpl="robot">🤖 Robot</button>
       <button data-tmpl="castle">🏰 Castle</button>
+      <button data-tmpl="car">🚗 Car</button>
+      <button data-tmpl="plane">✈ Plane</button>
+      <button data-tmpl="tree">🌳 Tree</button>
+      <button data-tmpl="sword">⚔ Sword</button>
+      <button data-tmpl="cat">🐱 Cat</button>
+      <button data-tmpl="spaceship">🛸 UFO</button>
+    </div>
+    <div id="objects-panel" title="All shapes in your scene">
+      <div class="label">Objects</div>
+      <div id="objects-list"></div>
     </div>
     <div id="shape-palette" title="Add primitive to scene">
       <button data-shape="box" title="Box">⬜</button>
@@ -546,6 +619,10 @@
       <button id="btn-delete" title="Delete selected (Del)">🗑 Delete</button>
       <button id="btn-group" title="Group selected (Cmd/Ctrl+G)">🔗 Group</button>
       <button id="btn-ungroup" title="Ungroup selected (Cmd/Ctrl+Shift+G)">✂ Ungroup</button>
+      <button id="btn-align-x" title="Align selected on X (line them up sideways)">⫶ AlignX</button>
+      <button id="btn-align-y" title="Align selected on Y (line them up vertically)">⫶ AlignY</button>
+      <button id="btn-align-z" title="Align selected on Z (line them up depth)">⫶ AlignZ</button>
+      <button id="btn-mute" title="Mute / unmute sound effects">🔊</button>
       <button id="btn-export-stl" title="Export full scene as printable STL">🖨 Print STL</button>
       <select id="save-slot" title="Pick a save slot">
         <option value="1">Slot 1</option>
@@ -1952,7 +2029,81 @@ function templates_castle() {
   const gate = makePrimitive('box', { color: '#451a03', size: 18 });
   gate.scale.set(1, 1.4, 0.3); placeAt(gate, 0, 18, 41);
 }
-const templateFns = { rocket: templates_rocket, house: templates_house, robot: templates_robot, castle: templates_castle };
+function templates_car() {
+  clearSceneObjects();
+  const body = makePrimitive('box', { color: '#dc2626', size: 50 }); body.scale.set(1.5, 0.5, 0.8); placeAt(body, 0, 14, 0);
+  const cabin = makePrimitive('box', { color: '#1e293b', size: 30 }); cabin.scale.set(1.4, 0.6, 0.75); placeAt(cabin, 0, 26, 0);
+  for (let s = -1; s <= 1; s += 2) {
+    const win = makePrimitive('box', { color: '#bae6fd', size: 12 }); win.scale.set(1, 1.2, 0.1); placeAt(win, s * 16, 26, 12);
+    for (let dx of [-25, 25]) {
+      const wheel = makePrimitive('cylinder', { color: '#111827', size: 14 }); wheel.scale.set(1, 0.4, 1); wheel.rotation.z = Math.PI/2; placeAt(wheel, dx, 6, s * 16);
+    }
+  }
+  const headlight = makePrimitive('sphere', { color: '#fef9c3', size: 8 }); placeAt(headlight, 38, 16, 0);
+}
+function templates_plane() {
+  clearSceneObjects();
+  const fus = makePrimitive('cylinder', { color: '#e5e7eb', size: 18 }); fus.scale.set(1, 4, 1); fus.rotation.z = Math.PI/2; placeAt(fus, 0, 30, 0);
+  const wings = makePrimitive('box', { color: '#dc2626', size: 80 }); wings.scale.set(1, 0.1, 0.3); placeAt(wings, 0, 28, 0);
+  const tail = makePrimitive('box', { color: '#dc2626', size: 22 }); tail.scale.set(0.6, 0.7, 0.1); placeAt(tail, -32, 38, 0);
+  const tailWing = makePrimitive('box', { color: '#dc2626', size: 30 }); tailWing.scale.set(0.6, 0.1, 0.3); placeAt(tailWing, -32, 32, 0);
+  const cockpit = makePrimitive('halfsphere', { color: '#bae6fd', size: 14 }); placeAt(cockpit, 16, 38, 0);
+  const prop = makePrimitive('cylinder', { color: '#111827', size: 24 }); prop.scale.set(1, 0.05, 0.05); prop.rotation.x = Math.PI/2; placeAt(prop, 40, 30, 0);
+  const propHub = makePrimitive('sphere', { color: '#fbbf24', size: 6 }); placeAt(propHub, 40, 30, 0);
+}
+function templates_tree() {
+  clearSceneObjects();
+  const trunk = makePrimitive('cylinder', { color: '#78350f', size: 14 }); trunk.scale.set(1, 4, 1); placeAt(trunk, 0, 28, 0);
+  const f1 = makePrimitive('sphere', { color: '#15803d', size: 50 }); placeAt(f1, 0, 58, 0);
+  const f2 = makePrimitive('sphere', { color: '#16a34a', size: 38 }); placeAt(f2, -16, 70, 0);
+  const f3 = makePrimitive('sphere', { color: '#22c55e', size: 32 }); placeAt(f3, 14, 76, 4);
+  const fruit1 = makePrimitive('sphere', { color: '#ef4444', size: 8 }); placeAt(fruit1, 22, 60, 14);
+  const fruit2 = makePrimitive('sphere', { color: '#ef4444', size: 8 }); placeAt(fruit2, -14, 56, -16);
+}
+function templates_sword() {
+  clearSceneObjects();
+  const blade = makePrimitive('box', { color: '#e5e7eb', size: 80 }); blade.scale.set(0.2, 1, 0.05); placeAt(blade, 0, 60, 0);
+  const guard = makePrimitive('box', { color: '#fbbf24', size: 30 }); guard.scale.set(1, 0.15, 0.3); placeAt(guard, 0, 20, 0);
+  const hilt = makePrimitive('cylinder', { color: '#78350f', size: 12 }); hilt.scale.set(1, 2.5, 1); placeAt(hilt, 0, 8, 0);
+  const pommel = makePrimitive('sphere', { color: '#fbbf24', size: 14 }); placeAt(pommel, 0, -6, 0);
+  const gem = makePrimitive('sphere', { color: '#7c3aed', size: 7 }); placeAt(gem, 0, -6, 8);
+}
+function templates_cat() {
+  clearSceneObjects();
+  const body = makePrimitive('sphere', { color: '#f97316', size: 30 }); body.scale.set(1.5, 0.9, 1); placeAt(body, 0, 16, 0);
+  const head = makePrimitive('sphere', { color: '#fb923c', size: 22 }); placeAt(head, 26, 24, 0);
+  for (let s = -1; s <= 1; s += 2) {
+    const ear = makePrimitive('cone', { color: '#fb923c', size: 8 }); placeAt(ear, 30, 36, s * 6);
+    const eye = makePrimitive('sphere', { color: '#16a34a', size: 4 }); placeAt(eye, 36, 26, s * 4);
+  }
+  const nose = makePrimitive('sphere', { color: '#ec4899', size: 3 }); placeAt(nose, 38, 22, 0);
+  for (let dx of [-12, 12]) {
+    for (let dz of [-7, 7]) {
+      const leg = makePrimitive('cylinder', { color: '#f97316', size: 6 }); leg.scale.set(1, 1.5, 1); placeAt(leg, dx, 4, dz);
+    }
+  }
+  const tail = makePrimitive('cylinder', { color: '#f97316', size: 6 }); tail.scale.set(1, 4, 1); tail.rotation.z = -Math.PI/3; placeAt(tail, -22, 28, 0);
+}
+function templates_spaceship() {
+  clearSceneObjects();
+  const saucer = makePrimitive('cylinder', { color: '#94a3b8', size: 80 }); saucer.scale.set(1, 0.12, 1); placeAt(saucer, 0, 24, 0);
+  const dome = makePrimitive('halfsphere', { color: '#86efac', size: 36 }); placeAt(dome, 0, 28, 0);
+  const glow = makePrimitive('sphere', { color: '#facc15', size: 14 }); placeAt(glow, 0, 14, 0);
+  for (let i = 0; i < 3; i++) {
+    const a = (i * 2 * Math.PI) / 3;
+    const leg = makePrimitive('cylinder', { color: '#475569', size: 4 }); leg.scale.set(1, 3, 1); placeAt(leg, Math.cos(a) * 22, 6, Math.sin(a) * 22);
+    const pad = makePrimitive('cylinder', { color: '#1f2937', size: 10 }); pad.scale.set(1, 0.3, 1); placeAt(pad, Math.cos(a) * 22, -2, Math.sin(a) * 22);
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = (i * 2 * Math.PI) / 8;
+    const light = makePrimitive('sphere', { color: '#fbbf24', size: 5 }); placeAt(light, Math.cos(a) * 36, 22, Math.sin(a) * 36);
+  }
+}
+const templateFns = {
+  rocket: templates_rocket, house: templates_house, robot: templates_robot, castle: templates_castle,
+  car: templates_car, plane: templates_plane, tree: templates_tree, sword: templates_sword,
+  cat: templates_cat, spaceship: templates_spaceship,
+};
 document.querySelectorAll('#templates button').forEach(b => {
   b.addEventListener('click', () => {
     const t = b.dataset.tmpl;
@@ -1978,6 +2129,140 @@ document.querySelectorAll('#templates button').forEach(b => {
     }, 100);
   });
 });
+
+
+// === V4: OBJECTS PANEL ===
+const objectsList = document.getElementById('objects-list');
+function refreshObjectsPanel() {
+  if (!objectsList) return;
+  objectsList.innerHTML = '';
+  const entries = [];
+  if (mesh) entries.push({ obj: mesh, name: '🦂 KAUVI scorpion', locked: true });
+  sceneObjects.forEach(o => {
+    const kind = o.userData?.kind || 'obj';
+    const icon = { box:'⬜', sphere:'⚪', cylinder:'⬛', cone:'🔺', pyramid:'🔻', torus:'⭕',
+                   halfsphere:'◖', wedge:'◢', prism:'📐', star:'★', text:'🅰', group:'🔗' }[kind] || '◆';
+    entries.push({ obj: o, name: icon + ' ' + (o.userData?.name || kind), locked: false });
+  });
+  entries.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'obj-row' + (selectedObjects.includes(e.obj) ? ' active' : '') + (e.locked ? ' locked' : '');
+    const visBtn = document.createElement('button');
+    visBtn.className = 'vis'; visBtn.textContent = e.obj.visible === false ? '⊘' : '👁'; visBtn.title = 'Show / hide';
+    visBtn.addEventListener('click', ev => { ev.stopPropagation(); e.obj.visible = !(e.obj.visible !== false); refreshObjectsPanel(); });
+    const nameEl = document.createElement('div');
+    nameEl.className = 'name'; nameEl.textContent = e.name;
+    nameEl.addEventListener('click', ev => { selectionAdd(e.obj, ev.shiftKey); refreshObjectsPanel(); refreshInspector(); refreshSizeReadout(); });
+    nameEl.addEventListener('dblclick', ev => {
+      ev.preventDefault(); if (e.locked) return;
+      const input = document.createElement('input');
+      input.type = 'text'; input.value = e.obj.userData?.name || '';
+      nameEl.innerHTML = ''; nameEl.appendChild(input); input.focus(); input.select();
+      const commit = () => { if (e.obj.userData) e.obj.userData.name = input.value || (e.obj.userData.kind || 'obj'); refreshObjectsPanel(); pushHistory('Rename'); };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev2 => { if (ev2.key === 'Enter') input.blur(); if (ev2.key === 'Escape') { refreshObjectsPanel(); } });
+    });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del'; delBtn.textContent = '×'; delBtn.title = 'Delete';
+    delBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (e.locked) return;
+      const idx = sceneObjects.indexOf(e.obj);
+      if (idx !== -1) sceneObjects.splice(idx, 1);
+      if (e.obj.userData && e.obj.userData._selOutline) scene.remove(e.obj.userData._selOutline);
+      scene.remove(e.obj);
+      if (e.obj.geometry && e.obj.geometry.dispose) e.obj.geometry.dispose();
+      if (e.obj.material && e.obj.material.dispose) e.obj.material.dispose();
+      const sIdx = selectedObjects.indexOf(e.obj);
+      if (sIdx !== -1) selectedObjects.splice(sIdx, 1);
+      if (transformControls.object === e.obj) transformControls.detach();
+      refreshObjectsPanel();
+      beepDelete();
+      pushHistory('Delete (panel)');
+    });
+    row.appendChild(visBtn); row.appendChild(nameEl); row.appendChild(delBtn);
+    objectsList.appendChild(row);
+  });
+}
+setInterval(refreshObjectsPanel, 1200);
+refreshObjectsPanel();
+
+
+// === V4: ALIGN ===
+function alignSelection(axis) {
+  if (selectedObjects.length < 2) { setStatus('Pick 2+ shapes to align (Shift+click)', 1500); return; }
+  const targets = selectedObjects;
+  const box = new THREE.Box3();
+  let first = true;
+  targets.forEach(o => { const b = new THREE.Box3().setFromObject(o); if (first) { box.copy(b); first = false; } else box.union(b); });
+  const center = new THREE.Vector3(); box.getCenter(center);
+  targets.forEach(o => { o.position[axis] = center[axis]; });
+  setStatus('Aligned on ' + axis.toUpperCase() + ' ⫶', 1300);
+  pushHistory('Align ' + axis);
+  beepClick();
+  refreshSizeReadout();
+}
+document.getElementById('btn-align-x').addEventListener('click', () => alignSelection('x'));
+document.getElementById('btn-align-y').addEventListener('click', () => alignSelection('y'));
+document.getElementById('btn-align-z').addEventListener('click', () => alignSelection('z'));
+
+
+// === V4: SOUND EFFECTS ===
+let audioCtx = null;
+let muted = localStorage.getItem('kauvi-muted') === '1';
+function getAudio() {
+  if (muted) return null;
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function beep(freq, dur, type='sine', vol=0.18) {
+  const ctx = getAudio(); if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type; osc.frequency.value = freq;
+  gain.gain.value = 0;
+  osc.connect(gain); gain.connect(ctx.destination);
+  const t0 = ctx.currentTime;
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(vol, t0 + 0.005);
+  gain.gain.linearRampToValueAtTime(0, t0 + dur);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+function beepAdd() { beep(600, 0.08, 'square', 0.12); }
+function beepDelete() { beep(220, 0.12, 'sawtooth', 0.14); }
+function beepSave() { beep(523, 0.08, 'sine', 0.12); setTimeout(() => beep(659, 0.08, 'sine', 0.12), 70); setTimeout(() => beep(784, 0.10, 'sine', 0.12), 140); }
+function beepClick() { beep(1200, 0.03, 'sine', 0.08); }
+window._beepAdd = beepAdd; window._beepDelete = beepDelete; window._beepSave = beepSave; window._beepClick = beepClick;
+
+const muteBtn = document.getElementById('btn-mute');
+function refreshMuteBtn() { if (muteBtn) muteBtn.textContent = muted ? '🔇' : '🔊'; }
+refreshMuteBtn();
+if (muteBtn) muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  localStorage.setItem('kauvi-muted', muted ? '1' : '0');
+  refreshMuteBtn();
+  setStatus(muted ? 'Muted 🔇' : 'Sound on 🔊', 900);
+  if (!muted) beepClick();
+});
+
+// Wire beeps into existing actions
+document.querySelectorAll('#shape-palette button').forEach(b => b.addEventListener('click', beepAdd));
+document.querySelectorAll('#templates button').forEach(b => b.addEventListener('click', beepAdd));
+document.getElementById('btn-delete').addEventListener('click', beepDelete);
+document.getElementById('btn-save').addEventListener('click', beepSave);
+document.getElementById('btn-duplicate').addEventListener('click', beepClick);
+document.getElementById('btn-mirror-x').addEventListener('click', beepClick);
+document.getElementById('btn-mirror-y').addEventListener('click', beepClick);
+document.getElementById('btn-mirror-z').addEventListener('click', beepClick);
+document.getElementById('btn-group').addEventListener('click', beepClick);
+document.getElementById('btn-ungroup').addEventListener('click', beepClick);
+
+// Refresh panel on any structural change: hook into transformControls + selection
+transformControls.addEventListener('objectChange', () => { refreshObjectsPanel(); });
+renderer.domElement.addEventListener('pointerdown', () => setTimeout(refreshObjectsPanel, 80), true);
 
 </script>
 </body>
