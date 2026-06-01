@@ -163,6 +163,7 @@
     <div id="toolbar">
       <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
       <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
+      <button id="btn-download" title="Download current STL for 3D printing">⬇ Download</button>
       <button id="btn-reset">↺ Reset</button>
       <button id="btn-wire">▒ Wireframe</button>
       <button id="btn-spin" class="primary">↻ Spin</button>
@@ -228,6 +229,9 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 30;
 controls.maxDistance = 1200;
+controls.zoomSpeed = 2.8;       // ~3x faster scroll-wheel zoom
+controls.rotateSpeed = 1.2;
+controls.panSpeed = 1.4;
 controls.target.set(0, 10, 18);
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
@@ -283,6 +287,8 @@ const mat = new THREE.MeshStandardMaterial({
 let mesh = null;
 let spinning = false;
 let wireframe = false;
+let currentBuffer = null;     // last-loaded STL bytes for download
+let currentName = 'model.stl';
 
 function setStatus(text, holdMs=1800) {
   statusEl.textContent = text;
@@ -296,6 +302,8 @@ function loadFromArrayBuffer(buf, label='model') {
   let geom;
   try { geom = loader.parse(buf); }
   catch (e) { setStatus('Failed to parse STL: ' + e.message); return; }
+  currentBuffer = buf;
+  currentName = (label && label.endsWith('.stl')) ? label : (label.split('.')[0] + '.stl');
   geom.computeVertexNormals();
   geom.center();
   geom.computeBoundingSphere();
@@ -390,6 +398,19 @@ document.getElementById('btn-fit').addEventListener('click', ()=>{
 document.getElementById('btn-bg').addEventListener('click', ()=>{
   bgIdx = (bgIdx + 1) % bgPalette.length;
   applyBg();
+});
+document.getElementById('btn-download').addEventListener('click', ()=>{
+  if (!currentBuffer) { setStatus('Nothing to download yet', 1800); return; }
+  const blob = new Blob([currentBuffer], { type: 'model/stl' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = currentName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  setStatus('Downloading ' + currentName, 1500);
 });
 
 // Resize
