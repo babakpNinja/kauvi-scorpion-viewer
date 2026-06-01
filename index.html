@@ -492,6 +492,40 @@
     font-weight: 700; cursor: pointer; font-size: 13px;
   }
   #ai-chat-send:disabled { opacity: 0.5; cursor: wait; }
+  /* v9: mic + upload buttons in chat input */
+  #ai-mic, #ai-upload {
+    background: white; color: #0b0d10;
+    border: 1px solid #d6dbe1; border-radius: 8px;
+    padding: 6px 10px; cursor: pointer; font-size: 14px;
+    line-height: 1; transition: background 100ms, border-color 100ms;
+  }
+  #ai-mic:hover, #ai-upload:hover { background: #eef2f5; border-color: #7c5cff; }
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); background: #fee2e2; }
+    50%      { box-shadow: 0 0 0 6px rgba(239,68,68,0); background: #fecaca; }
+  }
+  #ai-mic.listening {
+    background: #fee2e2 !important; color: #b91c1c;
+    border-color: #ef4444 !important;
+    animation: micPulse 1.3s ease-in-out infinite;
+  }
+  #ai-thumb-row {
+    display: none; padding: 0 10px 6px 10px; gap: 6px;
+    align-items: center; background: white;
+    border-top: 1px solid #d6dbe1;
+  }
+  #ai-thumb-row.show { display: flex; }
+  #ai-thumb-row img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #d6dbe1; }
+  #ai-thumb-row .clear-thumb {
+    background: transparent; border: none; cursor: pointer;
+    color: #6b7280; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+  }
+  #ai-thumb-row .clear-thumb:hover { background: #fee2e2; color: #b91c1c; }
+  #ai-thumb-row .label { font-size: 11px; color: #6b7280; flex: 1; }
+  .ai-bubble img.user-img {
+    max-width: 120px; max-height: 120px;
+    border-radius: 8px; display: block; margin-bottom: 4px;
+  }
   @media (max-width: 640px) {
     #ai-launcher { bottom: 80px; right: 8px; padding: 10px 14px; font-size: 13px; }
     #ai-chat-panel { bottom: 80px; right: 8px; left: 8px; width: auto; height: 60vh; }
@@ -684,9 +718,13 @@
         <button data-ex="make a dragon with wings and a tail">🐉 dragon</button>
         <button data-ex="set the background to night sky">🌌 night sky</button>
       </div>
+      <div id="ai-thumb-row"></div>
       <div id="ai-chat-input-row">
+        <button id="ai-mic" title="Voice input">🎤</button>
+        <button id="ai-upload" title="Send a drawing or photo">📷</button>
         <input id="ai-chat-input" type="text" placeholder="Ask AI to build something..." maxlength="500">
-        <button id="ai-chat-send">↩ Send</button>
+        <button id="ai-chat-send">↩</button>
+        <input id="ai-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
     </div>
     <div id="shape-palette" title="Add primitive to scene">
@@ -2495,11 +2533,16 @@ const AI_KEY = 'kauvi-chat-history';
 let aiHistory = [];
 try { aiHistory = JSON.parse(localStorage.getItem(AI_KEY) || '[]'); if (!Array.isArray(aiHistory)) aiHistory = []; } catch(e) { aiHistory = []; }
 
-function renderAIBubble(role, text, cmds) {
+function renderAIBubble(role, text, cmds, image) {
   const b = document.createElement('div');
   b.className = 'ai-bubble ' + (role === 'user' ? 'user' : 'assistant');
   if (role === 'assistant') {
     const who = document.createElement('div'); who.className = 'who'; who.textContent = '🤖 AI'; b.appendChild(who);
+  }
+  if (image && typeof image === 'string' && image.startsWith('data:image/')) {
+    const im = document.createElement('img');
+    im.className = 'user-img'; im.src = image; im.alt = 'attached image';
+    b.appendChild(im);
   }
   const txt = document.createElement('div'); txt.textContent = text; b.appendChild(txt);
   if (cmds && cmds.length) {
@@ -2525,7 +2568,7 @@ function renderHistory() {
     renderAIBubble('assistant', 'Hi! Tell me what to build. Try one of the examples below.');
     return;
   }
-  aiHistory.slice(-20).forEach(m => renderAIBubble(m.role, m.content, m.cmds));
+  aiHistory.slice(-20).forEach(m => renderAIBubble(m.role, m.content, m.cmds, m.image));
 }
 renderHistory();
 
@@ -2596,18 +2639,27 @@ function executeCommands(plan) {
 
 async function sendAI() {
   const text = aiInput.value.trim();
-  if (!text || aiSend.disabled) return;
+  const hasImage = !!pendingImage;
+  if (!text && !hasImage) return;
+  if (aiSend.disabled) return;
   aiInput.value = '';
   aiSend.disabled = true;
   aiInput.disabled = true;
-  aiHistory.push({ role: 'user', content: text });
-  renderAIBubble('user', text);
+  const turn = { role: 'user', content: text || (hasImage ? 'What is this? Build it in 3D.' : '') };
+  if (hasImage) turn.image = pendingImage;
+  aiHistory.push(turn);
+  renderAIBubble('user', turn.content, null, turn.image);
+  clearPendingImage();
   const thinking = renderThinking();
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: aiHistory.slice(-12).map(m => ({ role: m.role, content: m.content })) })
+      body: JSON.stringify({ messages: aiHistory.slice(-12).map(m => {
+        const out = { role: m.role, content: m.content };
+        if (m.image) out.image = m.image;
+        return out;
+      }) })
     });
     thinking.remove();
     const data = await resp.json();
@@ -2639,6 +2691,115 @@ aiInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDef
 document.querySelectorAll('#ai-chat-examples button').forEach(b => {
   b.addEventListener('click', () => { aiInput.value = b.dataset.ex; sendAI(); });
 });
+
+
+// === V9: VOICE INPUT + IMAGE UPLOAD ===
+let pendingImage = null;
+const aiThumbRow = document.getElementById('ai-thumb-row');
+const aiMicBtn = document.getElementById('ai-mic');
+const aiUploadBtn = document.getElementById('ai-upload');
+const aiFileInput = document.getElementById('ai-file');
+
+function clearPendingImage() {
+  pendingImage = null;
+  if (aiThumbRow) { aiThumbRow.classList.remove('show'); aiThumbRow.innerHTML = ''; }
+}
+function setPendingImage(dataUrl, name) {
+  pendingImage = dataUrl;
+  if (!aiThumbRow) return;
+  aiThumbRow.innerHTML = '';
+  const im = document.createElement('img'); im.src = dataUrl; aiThumbRow.appendChild(im);
+  const lbl = document.createElement('div'); lbl.className = 'label';
+  lbl.textContent = name || 'Ready to send';
+  aiThumbRow.appendChild(lbl);
+  const x = document.createElement('button'); x.className = 'clear-thumb'; x.textContent = '×'; x.title = 'Remove image';
+  x.addEventListener('click', clearPendingImage);
+  aiThumbRow.appendChild(x);
+  aiThumbRow.classList.add('show');
+}
+
+// File upload flow
+if (aiUploadBtn && aiFileInput) {
+  aiUploadBtn.addEventListener('click', () => aiFileInput.click());
+  aiFileInput.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) {
+      setStatus('Image too big (max 8 MB)', 2500);
+      aiFileInput.value = '';
+      return;
+    }
+    const r = new FileReader();
+    r.onload = ev => { setPendingImage(ev.target.result, f.name); };
+    r.onerror = () => { setStatus('Could not read image', 1800); };
+    r.readAsDataURL(f);
+    aiFileInput.value = '';
+  });
+}
+
+// Voice input via Web Speech API
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null;
+let listening = false;
+if (!SpeechRec && aiMicBtn) { aiMicBtn.style.display = 'none'; }
+function startListening() {
+  if (!SpeechRec || listening) return;
+  try {
+    recog = new SpeechRec();
+    recog.lang = 'en-US';
+    recog.interimResults = true;
+    recog.continuous = false;
+    recog.onresult = (ev) => {
+      let interim = ''; let final = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) final += t; else interim += t;
+      }
+      if (final) aiInput.value = final.trim();
+      else aiInput.placeholder = 'Hearing: ' + interim.trim() + '...';
+    };
+    recog.onend = () => {
+      listening = false;
+      aiMicBtn.classList.remove('listening');
+      aiMicBtn.title = 'Voice input';
+      aiInput.placeholder = 'Ask AI to build something...';
+      // Auto-submit if we captured something
+      if (aiInput.value.trim()) sendAI();
+    };
+    recog.onerror = (e) => {
+      listening = false;
+      aiMicBtn.classList.remove('listening');
+      aiInput.placeholder = 'Ask AI to build something...';
+      setStatus('Mic: ' + e.error, 1800);
+    };
+    recog.start();
+    listening = true;
+    aiMicBtn.classList.add('listening');
+    aiMicBtn.title = 'Stop listening';
+    aiInput.placeholder = 'Listening...';
+  } catch (e) {
+    setStatus('Voice not available: ' + e.message, 2000);
+  }
+}
+function stopListening() {
+  if (recog && listening) { try { recog.stop(); } catch(e){} }
+}
+if (aiMicBtn) aiMicBtn.addEventListener('click', () => { if (listening) stopListening(); else startListening(); });
+
+// Update example chips with vision-friendly ones
+const examplesEl = document.getElementById('ai-chat-examples');
+if (examplesEl && !examplesEl.dataset.v9) {
+  examplesEl.dataset.v9 = '1';
+  const fresh = document.createElement('button');
+  fresh.dataset.ex = 'take a look at this drawing and build it';
+  fresh.textContent = '📷 build my drawing';
+  examplesEl.appendChild(fresh);
+  fresh.addEventListener('click', () => {
+    if (!pendingImage) { setStatus('Pick a photo first (📷)', 2000); aiUploadBtn?.click(); return; }
+    aiInput.value = fresh.dataset.ex;
+    sendAI();
+  });
+}
 
 
 // === V6: REFERENCE IMAGE PANEL (DALL-E 3 via /api/image) ===

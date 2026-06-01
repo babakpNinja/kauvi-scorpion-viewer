@@ -41,6 +41,8 @@ Valid command actions:
 
 Valid shape kinds: box, sphere, cylinder, cone, pyramid, torus, halfsphere, wedge, prism, star.
 
+If the kid sends an *image* (a drawing, sketch, or photo), look at it carefully and decide what 3D model would best represent the subject. Tell them what you see in one short sentence (e.g. "I see a dog with floppy ears!"), then emit build commands that recreate it in shapes. Pick colors that match the drawing. Keep proportions sensible. Always start with action:"clear" before building from an image.
+
 Coordinate convention: +Y is up. Y=0 is the floor. 1 unit = 1 mm. Default size 20.
 
 Rules:
@@ -65,11 +67,32 @@ app.post('/api/chat', async (req, res) => {
   const lastUser = incoming[incoming.length - 1];
   console.log(new Date().toISOString(), 'chat:', (lastUser?.content || '').slice(0, 100));
 
-  // Sanitize: only pass role+content fields, max last 12 turns
-  const messages = incoming.slice(-12).map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: String(m.content || '').slice(0, 4000)
-  }));
+  // Sanitize + build multimodal content where image is attached.
+  // Accepted shapes per turn:
+  //   { role, content: "string" }                    -> plain text
+  //   { role, content: "string", image: "data:..." } -> text + image (Sonnet vision)
+  const messages = incoming.slice(-12).map(m => {
+    const role = m.role === 'assistant' ? 'assistant' : 'user';
+    const text = String(m.content || '').slice(0, 4000);
+    if (m.image && typeof m.image === 'string' && m.image.startsWith('data:image/')) {
+      const match = m.image.match(/^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,(.+)$/);
+      if (match) {
+        const mediaType = match[1] === 'image/jpg' ? 'image/jpeg' : match[1];
+        const b64 = match[2];
+        // Cap raw base64 at 8 MB worth (~10.6M chars). Skip image if oversized.
+        if (b64.length <= 10_600_000) {
+          return {
+            role,
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+              { type: 'text', text: text || 'Build this drawing in 3D shapes.' }
+            ]
+          };
+        }
+      }
+    }
+    return { role, content: text };
+  });
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -81,7 +104,7 @@ app.post('/api/chat', async (req, res) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: SYSTEM_PROMPT,
         messages
       })
