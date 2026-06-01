@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
-<title>Kauvi Cyborg Scorpion · 3D Viewer</title>
+<title>Kauvi 3D Studio</title>
 <style>
   :root {
     --bg:#0b0d10;
@@ -169,6 +169,21 @@
     overflow-y: auto;
   }
   #edit-panel.show { display:block; }
+  #history-panel {
+    position:absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 56px);
+    left: 14px;
+    width: 230px;
+    background: rgba(17, 21, 26, 0.92);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border:1px solid var(--line); border-radius:12px;
+    padding:12px; z-index:6; color:var(--text);
+  }
+  #history-list .h-item { padding:5px 8px; border-radius:5px; cursor:pointer; color:var(--text); }
+  #history-list .h-item:hover { background:#1a2129; }
+  #history-list .h-item.current { background:rgba(57,225,196,0.12); color:var(--accent); }
+  #history-list .h-item .meta { color:var(--muted); font-size:10px; }
+  #toolbar button:disabled { opacity:0.35; cursor:not-allowed; }
   #edit-panel h3 {
     margin:0 0 8px 0; font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
     color:var(--accent); font-weight:600;
@@ -204,7 +219,7 @@
 <body>
 <div id="app">
   <header>
-    <h1><span>KAUVI</span> · CYBORG SCORPION</h1>
+    <h1><span>KAUVI</span> 3D STUDIO</h1>
     <div class="badge" id="tri-count">— tris</div>
   </header>
   <div id="stage">
@@ -215,6 +230,11 @@
       <b>Drop</b> an .stl file anywhere to load it.
     </div>
     <div id="status"></div>
+    <div id="history-panel" style="display:none;">
+      <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:8px;">📜 History</div>
+      <div id="history-list" style="font-size:11px; max-height:60vh; overflow-y:auto;"></div>
+      <button id="btn-history-clear" style="margin-top:8px; padding:6px 12px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:6px; font-size:11px; cursor:pointer; width:100%;">Clear history</button>
+    </div>
     <div id="edit-panel">
       <h3>✎ Live Edit</h3>
       <div class="grp">
@@ -252,12 +272,15 @@
       </div>
       <div class="apply-row">
         <button id="btn-bake" class="primary" title="Bake transform into geometry so Download includes the edit">Apply</button>
-        <button id="btn-undo" title="Revert to original loaded mesh">Reset</button>
+        <button id="btn-edit-reset" title="Revert to original loaded mesh">Reset</button>
       </div>
     </div>
     <div id="toolbar">
       <label for="fileinput" title="Load a .stl file">📁 Open STL</label>
       <input id="fileinput" type="file" accept=".stl,.STL,application/sla,application/vnd.ms-pki.stl">
+      <button id="btn-undo" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
+      <button id="btn-redo" title="Redo (Cmd/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+      <button id="btn-history" title="Show edit history">📜 History</button>
       <button id="btn-download" title="Download current STL for 3D printing">⬇ Download</button>
       <button id="btn-edit" title="Toggle edit panel">✎ Edit</button>
       <label class="color-swatch" title="Model color"><input type="color" id="qc-model" value="#9aa4af"><span>Model</span></label>
@@ -402,6 +425,100 @@ transformControls.visible = false;
 transformControls.enabled = false;
 
 const stlExporter = new STLExporter();
+
+// === UNDO/REDO STACK ===
+const HISTORY_MAX = 50;
+const undoStack = [];
+const redoStack = [];
+function snapshotState() {
+  if (!mesh) return null;
+  return {
+    matColor: mat.color.getHex(),
+    matMetal: mat.metalness,
+    matRough: mat.roughness,
+    matEmiss: mat.emissive.getHex(),
+    matEmissInt: mat.emissiveIntensity,
+    bgColor: scene.background ? scene.background.getHex() : 0,
+    meshPos: mesh.position.toArray(),
+    meshRot: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+    meshScale: mesh.scale.toArray(),
+    hemiInt: hemi.intensity,
+    keyInt: key.intensity, keyCol: key.color.getHex(),
+    rimInt: rim.intensity, rimCol: rim.color.getHex(),
+  };
+}
+function restoreState(s) {
+  if (!s || !mesh) return;
+  mat.color.setHex(s.matColor); mat.metalness = s.matMetal; mat.roughness = s.matRough;
+  mat.emissive.setHex(s.matEmiss); mat.emissiveIntensity = s.matEmissInt;
+  scene.background = new THREE.Color(s.bgColor);
+  scene.fog = new THREE.Fog(s.bgColor, 400, 1400);
+  mesh.position.fromArray(s.meshPos);
+  mesh.rotation.set(s.meshRot[0], s.meshRot[1], s.meshRot[2]);
+  mesh.scale.fromArray(s.meshScale);
+  hemi.intensity = s.hemiInt;
+  key.intensity = s.keyInt; key.color.setHex(s.keyCol);
+  rim.intensity = s.rimInt; rim.color.setHex(s.rimCol);
+  syncInputsFromState();
+}
+function hex6(n) { return '#' + (n>>>0).toString(16).padStart(6,'0').slice(-6); }
+function syncInputsFromState() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('mat-color', hex6(mat.color.getHex())); set('qc-model', hex6(mat.color.getHex()));
+  set('mat-metal', mat.metalness); set('mat-rough', mat.roughness);
+  set('mat-emiss', mat.emissiveIntensity);
+  set('mat-emiss-color', hex6(mat.emissive.getHex())); set('qc-glow', hex6(mat.emissive.getHex()));
+  set('lt-ambient', hemi.intensity);
+  set('lt-key', key.intensity); set('lt-key-color', hex6(key.color.getHex()));
+  set('lt-rim', rim.intensity); set('lt-rim-color', hex6(rim.color.getHex()));
+  if (scene.background) { set('qc-bg', hex6(scene.background.getHex())); set('lt-bg-color', hex6(scene.background.getHex())); }
+}
+function pushHistory(label) {
+  const s = snapshotState();
+  if (!s) return;
+  undoStack.push({ label, ts: Date.now(), state: s });
+  if (undoStack.length > HISTORY_MAX) undoStack.shift();
+  redoStack.length = 0;
+  refreshHistoryUI();
+}
+function doUndo() {
+  if (undoStack.length < 2) { setStatus('Nothing to undo', 900); return; }
+  const top = undoStack.pop();
+  redoStack.push(top);
+  const prev = undoStack[undoStack.length - 1];
+  restoreState(prev.state);
+  setStatus('Undo: ' + top.label, 1200);
+  refreshHistoryUI();
+}
+function doRedo() {
+  if (!redoStack.length) { setStatus('Nothing to redo', 900); return; }
+  const next = redoStack.pop();
+  undoStack.push(next);
+  restoreState(next.state);
+  setStatus('Redo: ' + next.label, 1200);
+  refreshHistoryUI();
+}
+function refreshHistoryUI() {
+  const undoBtn = document.getElementById('btn-undo');
+  const redoBtn = document.getElementById('btn-redo');
+  if (undoBtn) undoBtn.disabled = undoStack.length < 2;
+  if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+  const list = document.getElementById('history-list');
+  if (!list) return;
+  list.innerHTML = '';
+  undoStack.slice().reverse().forEach((h, i) => {
+    const div = document.createElement('div');
+    div.className = 'h-item' + (i === 0 ? ' current' : '');
+    const t = new Date(h.ts);
+    div.innerHTML = '<div>' + h.label + '</div><div class="meta">' + t.toLocaleTimeString() + '</div>';
+    list.appendChild(div);
+  });
+}
+let pushTimer = null;
+function pushHistoryDebounced(label, ms=400) {
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => pushHistory(label), ms);
+}
 
 function setStatus(text, holdMs=1800) {
   statusEl.textContent = text;
@@ -709,8 +826,40 @@ function loop() {
 applyBg();
 loop();
 
+// === UNDO/REDO LISTENERS ===
+document.getElementById('btn-undo').addEventListener('click', doUndo);
+document.getElementById('btn-redo').addEventListener('click', doRedo);
+document.getElementById('btn-history').addEventListener('click', () => {
+  const p = document.getElementById('history-panel');
+  p.style.display = (p.style.display === 'block') ? 'none' : 'block';
+});
+document.getElementById('btn-history-clear').addEventListener('click', () => {
+  undoStack.length = 0; redoStack.length = 0;
+  pushHistory('Cleared history');
+});
+document.addEventListener('keydown', e => {
+  if (e.target && e.target.matches('input,textarea')) return;
+  const isUndo = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey;
+  const isRedo = ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && e.shiftKey) ||
+                 ((e.key === 'y' || e.key === 'Y') && (e.metaKey || e.ctrlKey));
+  if (isUndo) { e.preventDefault(); doUndo(); }
+  else if (isRedo) { e.preventDefault(); doRedo(); }
+});
+['mat-color','mat-metal','mat-rough','mat-emiss','mat-emiss-color',
+ 'qc-model','qc-bg','qc-glow',
+ 'lt-ambient','lt-key','lt-key-color','lt-rim','lt-rim-color','lt-bg-color']
+  .forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => pushHistory('Adjust ' + id.replace(/^(mat|qc|lt)-/, '')));
+  });
+document.querySelectorAll('#lt-presets button').forEach(btn => {
+  btn.addEventListener('click', () => pushHistory('Preset: ' + btn.dataset.preset));
+});
+transformControls.addEventListener('mouseUp', () => pushHistory('Transform'));
+
 // Preload scorpion
 loadFromUrl('kauvi_scorpion.stl?v=' + Math.floor(Date.now()/60000), 'KAUVI scorpion');
+setTimeout(() => { if (mesh) pushHistory('Initial'); }, 4000);
 </script>
 </body>
 </html>
