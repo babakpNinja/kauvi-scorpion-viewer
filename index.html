@@ -256,6 +256,92 @@
     font-family: inherit; position:relative;
   }
   .kid-modal-inner h2 { margin:0 0 14px 0; font-size:22px; color:#0b0d10; }
+  /* === v3: size readout panel === */
+  #size-readout {
+    position: absolute;
+    top: 64px;
+    right: 14px;
+    z-index: 6;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #d0d6dd;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #0b0d10;
+    font-family: ui-monospace, SF Mono, Menlo, monospace;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    min-width: 180px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  #size-readout .label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  #size-readout .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+  }
+  #size-readout .row b { color: #0b0d10; font-weight: 600; }
+  #size-readout .row span { color: #1f6aa5; }
+  #size-readout .scene {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #d0d6dd;
+  }
+  /* === v3: templates panel === */
+  #templates {
+    position: absolute;
+    top: 64px;
+    left: 14px;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #d0d6dd;
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  #templates .label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+  #templates button {
+    appearance: none;
+    background: linear-gradient(180deg, #ffffff, #f3f6fa);
+    border: 1px solid #d0d6dd;
+    color: #0b0d10;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 110px;
+    text-align: left;
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  #templates button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+  }
+  #templates button:active { transform: translateY(0); }
+  @media (max-width: 640px) {
+    #size-readout { top: auto; bottom: 80px; right: 8px; font-size: 10px; min-width: 140px; }
+    #templates { top: auto; bottom: 80px; left: 8px; }
+    #templates button { min-width: 80px; padding: 6px 10px; font-size: 11px; }
+  }
   .kid-close { position:absolute; top:10px; right:14px; background:transparent; border:0; font-size:28px; color:#666; cursor:pointer; }
   .kid-steps { display:flex; flex-direction:column; gap:14px; margin:12px 0 18px 0; }
   .kid-step { display:flex; gap:14px; align-items:flex-start; }
@@ -307,6 +393,23 @@
   </header>
   <div id="stage">
     <div id="dropzone"></div>
+    <div id="size-readout" title="Real-world size in mm (1 unit = 1 mm)">
+      <div class="label">Selected size</div>
+      <div class="row"><b>W</b><span id="sz-w">—</span></div>
+      <div class="row"><b>H</b><span id="sz-h">—</span></div>
+      <div class="row"><b>D</b><span id="sz-d">—</span></div>
+      <div class="scene">
+        <div class="label">Full print</div>
+        <div class="row"><b>W×H×D</b><span id="sz-scene">—</span></div>
+      </div>
+    </div>
+    <div id="templates" title="Start from a fun template">
+      <div class="label">Templates</div>
+      <button data-tmpl="rocket">🚀 Rocket</button>
+      <button data-tmpl="house">🏠 House</button>
+      <button data-tmpl="robot">🤖 Robot</button>
+      <button data-tmpl="castle">🏰 Castle</button>
+    </div>
     <div id="shape-palette" title="Add primitive to scene">
       <button data-shape="box" title="Box">⬜</button>
       <button data-shape="sphere" title="Sphere">⚪</button>
@@ -441,6 +544,8 @@
       <button id="btn-mirror-z" title="Mirror across Z axis">⤧ MirrorZ</button>
       <button id="btn-snap" title="Snap to grid (5 unit)">⊞ Snap</button>
       <button id="btn-delete" title="Delete selected (Del)">🗑 Delete</button>
+      <button id="btn-group" title="Group selected (Cmd/Ctrl+G)">🔗 Group</button>
+      <button id="btn-ungroup" title="Ungroup selected (Cmd/Ctrl+Shift+G)">✂ Ungroup</button>
       <button id="btn-export-stl" title="Export full scene as printable STL">🖨 Print STL</button>
       <select id="save-slot" title="Pick a save slot">
         <option value="1">Slot 1</option>
@@ -1626,6 +1731,253 @@ document.addEventListener('keydown', e => {
 
 // Init inspector
 refreshInspector();
+
+
+// === V3: REAL-WORLD MM SIZE READOUT ===
+const szW = document.getElementById('sz-w');
+const szH = document.getElementById('sz-h');
+const szD = document.getElementById('sz-d');
+const szScene = document.getElementById('sz-scene');
+const mm = (n) => Math.round(n) + 'mm';
+function refreshSizeReadout() {
+  const t = selectedObjects[0];
+  if (t) {
+    const box = new THREE.Box3().setFromObject(t);
+    const sz = new THREE.Vector3(); box.getSize(sz);
+    szW.textContent = mm(sz.x);
+    szH.textContent = mm(sz.y);
+    szD.textContent = mm(sz.z);
+  } else {
+    szW.textContent = szH.textContent = szD.textContent = '—';
+  }
+  // Scene total bbox
+  const all = [...sceneObjects];
+  if (mesh) all.push(mesh);
+  if (all.length === 0) { szScene.textContent = '—'; return; }
+  const box = new THREE.Box3();
+  let first = true;
+  all.forEach(o => {
+    const b = new THREE.Box3().setFromObject(o);
+    if (first) { box.copy(b); first = false; }
+    else box.union(b);
+  });
+  const sz = new THREE.Vector3(); box.getSize(sz);
+  szScene.textContent = mm(sz.x) + ' × ' + mm(sz.y) + ' × ' + mm(sz.z);
+}
+// Hook into existing events
+transformControls.addEventListener('objectChange', refreshSizeReadout);
+// Patch refreshInspector to also refresh size
+const _origRefreshInspector = refreshInspector;
+window._refreshSizeReadout = refreshSizeReadout;
+// Wrap selectionAdd / selectionClear by listening on objectChange + a tick after click handlers run
+renderer.domElement.addEventListener('pointerdown', () => setTimeout(refreshSizeReadout, 50), true);
+setInterval(refreshSizeReadout, 1000);
+refreshSizeReadout();
+
+
+// === V3: GROUP / UNGROUP ===
+function groupSelection() {
+  if (selectedObjects.length < 2) { setStatus('Pick 2+ shapes first (Shift+click)', 1500); return; }
+  const targets = selectedObjects.filter(o => o !== mesh);
+  if (targets.length < 2) { setStatus('Need 2+ shapes (not the scorpion)', 1500); return; }
+  const group = new THREE.Group();
+  group.userData = { kind: 'group', name: 'group_' + (sceneObjects.length + 1), _kids: [] };
+  // Compute group center
+  const box = new THREE.Box3();
+  let first = true;
+  targets.forEach(o => {
+    const b = new THREE.Box3().setFromObject(o);
+    if (first) { box.copy(b); first = false; } else box.union(b);
+  });
+  const center = new THREE.Vector3(); box.getCenter(center);
+  group.position.copy(center);
+  // Move each target under group, preserving world position
+  targets.forEach(o => {
+    const idx = sceneObjects.indexOf(o);
+    if (idx !== -1) sceneObjects.splice(idx, 1);
+    if (o.userData._selOutline) { scene.remove(o.userData._selOutline); o.userData._selOutline = null; }
+    scene.remove(o);
+    o.position.sub(center);
+    group.add(o);
+    group.userData._kids.push(o);
+  });
+  scene.add(group);
+  sceneObjects.push(group);
+  selectionClear();
+  selectionAdd(group, false);
+  setStatus('Grouped ' + targets.length + ' shapes 🔗', 1400);
+  pushHistory('Group');
+}
+function ungroupSelection() {
+  const t = selectedObjects[0];
+  if (!t || t.userData.kind !== 'group') { setStatus('Pick a group first', 1500); return; }
+  const kids = t.children.slice();
+  const groupPos = t.position.clone();
+  kids.forEach(c => {
+    t.remove(c);
+    c.position.add(groupPos);
+    scene.add(c);
+    sceneObjects.push(c);
+  });
+  const idx = sceneObjects.indexOf(t);
+  if (idx !== -1) sceneObjects.splice(idx, 1);
+  if (t.userData._selOutline) scene.remove(t.userData._selOutline);
+  scene.remove(t);
+  selectionClear();
+  setStatus('Ungrouped ✂', 1400);
+  pushHistory('Ungroup');
+  refreshInspector();
+}
+document.getElementById('btn-group').addEventListener('click', groupSelection);
+document.getElementById('btn-ungroup').addEventListener('click', ungroupSelection);
+document.addEventListener('keydown', e => {
+  if (e.target && e.target.matches('input,textarea,select')) return;
+  const isG = (e.key === 'g' || e.key === 'G') && (e.metaKey || e.ctrlKey);
+  if (isG && e.shiftKey) { e.preventDefault(); ungroupSelection(); }
+  else if (isG) { e.preventDefault(); groupSelection(); }
+});
+
+
+// === V3: TEMPLATES GALLERY ===
+function clearSceneObjects() {
+  sceneObjects.slice().forEach(o => {
+    if (o.userData._selOutline) scene.remove(o.userData._selOutline);
+    scene.remove(o);
+    if (o.geometry) o.geometry.dispose && o.geometry.dispose();
+    if (o.material && o.material.dispose) o.material.dispose();
+    // Children of a group too
+    if (o.children) o.children.forEach(c => {
+      if (c.geometry && c.geometry.dispose) c.geometry.dispose();
+      if (c.material && c.material.dispose) c.material.dispose();
+    });
+  });
+  sceneObjects.length = 0;
+  selectionClear();
+  if (transformControls.object) transformControls.detach();
+}
+function placeAt(obj, x, y, z) { obj.position.set(x, y, z); return obj; }
+function templates_rocket() {
+  clearSceneObjects();
+  // body
+  const body = makePrimitive('cylinder', { color: '#e6ecf2', size: 30 });
+  body.scale.set(1, 2.5, 1); placeAt(body, 0, 35, 0);
+  // nose
+  const nose = makePrimitive('cone', { color: '#ef4444', size: 30 });
+  nose.scale.set(1, 1.2, 1); placeAt(nose, 0, 85, 0);
+  // window
+  const win = makePrimitive('sphere', { color: '#60a5fa', size: 10 });
+  placeAt(win, 0, 50, 14);
+  // 4 fins
+  for (let i = 0; i < 4; i++) {
+    const fin = makePrimitive('wedge', { color: '#dc2626', size: 14 });
+    const a = (i * Math.PI) / 2;
+    placeAt(fin, Math.cos(a) * 16, 5, Math.sin(a) * 16);
+    fin.rotation.y = -a;
+  }
+  // flames (cone pointing down)
+  const flame = makePrimitive('cone', { color: '#f59e0b', size: 20 });
+  flame.rotation.z = Math.PI; placeAt(flame, 0, -8, 0);
+}
+function templates_house() {
+  clearSceneObjects();
+  // base
+  const base = makePrimitive('box', { color: '#fde68a', size: 40 });
+  base.scale.set(1.4, 1, 1); placeAt(base, 0, 18, 0);
+  // roof
+  const roof = makePrimitive('pyramid', { color: '#b91c1c', size: 60 });
+  roof.scale.set(1, 0.7, 1); placeAt(roof, 0, 50, 0);
+  // door
+  const door = makePrimitive('box', { color: '#7c3aed', size: 12 });
+  door.scale.set(1, 1.6, 0.2); placeAt(door, 0, 12, 21);
+  // chimney
+  const chim = makePrimitive('box', { color: '#52525b', size: 10 });
+  chim.scale.set(1, 2.2, 1); placeAt(chim, 15, 55, -6);
+  // 2 windows
+  for (let s = -1; s <= 1; s += 2) {
+    const w = makePrimitive('box', { color: '#bae6fd', size: 8 });
+    w.scale.set(1, 1, 0.2); placeAt(w, s * 16, 20, 21);
+  }
+}
+function templates_robot() {
+  clearSceneObjects();
+  // body
+  const body = makePrimitive('box', { color: '#64748b', size: 30 });
+  body.scale.set(1.2, 1.4, 0.8); placeAt(body, 0, 22, 0);
+  // head
+  const head = makePrimitive('box', { color: '#94a3b8', size: 22 });
+  placeAt(head, 0, 50, 0);
+  // eyes
+  for (let s = -1; s <= 1; s += 2) {
+    const eye = makePrimitive('sphere', { color: '#10b981', size: 6 });
+    placeAt(eye, s * 6, 52, 11);
+  }
+  // antenna
+  const ant = makePrimitive('cylinder', { color: '#facc15', size: 2 });
+  ant.scale.set(1, 6, 1); placeAt(ant, 0, 68, 0);
+  const antBall = makePrimitive('sphere', { color: '#ef4444', size: 6 });
+  placeAt(antBall, 0, 78, 0);
+  // arms
+  for (let s = -1; s <= 1; s += 2) {
+    const arm = makePrimitive('cylinder', { color: '#475569', size: 6 });
+    arm.scale.set(1, 4, 1); placeAt(arm, s * 22, 22, 0);
+    const hand = makePrimitive('sphere', { color: '#cbd5e1', size: 8 });
+    placeAt(hand, s * 22, 4, 0);
+  }
+  // legs
+  for (let s = -1; s <= 1; s += 2) {
+    const leg = makePrimitive('cylinder', { color: '#475569', size: 7 });
+    leg.scale.set(1, 3, 1); placeAt(leg, s * 9, 0, 0);
+  }
+}
+function templates_castle() {
+  clearSceneObjects();
+  // base wall
+  const base = makePrimitive('box', { color: '#a8a29e', size: 80 });
+  base.scale.set(1, 0.4, 1); placeAt(base, 0, 14, 0);
+  // 4 corner towers
+  for (let dx = -1; dx <= 1; dx += 2) {
+    for (let dz = -1; dz <= 1; dz += 2) {
+      const tower = makePrimitive('cylinder', { color: '#d6d3d1', size: 16 });
+      tower.scale.set(1, 3, 1); placeAt(tower, dx * 36, 38, dz * 36);
+      const top = makePrimitive('cone', { color: '#1e40af', size: 18 });
+      placeAt(top, dx * 36, 78, dz * 36);
+    }
+  }
+  // central keep
+  const keep = makePrimitive('cylinder', { color: '#f5f5f4', size: 24 });
+  keep.scale.set(1, 4, 1); placeAt(keep, 0, 48, 0);
+  const flag = makePrimitive('cone', { color: '#dc2626', size: 26 });
+  placeAt(flag, 0, 96, 0);
+  // gate
+  const gate = makePrimitive('box', { color: '#451a03', size: 18 });
+  gate.scale.set(1, 1.4, 0.3); placeAt(gate, 0, 18, 41);
+}
+const templateFns = { rocket: templates_rocket, house: templates_house, robot: templates_robot, castle: templates_castle };
+document.querySelectorAll('#templates button').forEach(b => {
+  b.addEventListener('click', () => {
+    const t = b.dataset.tmpl;
+    const fn = templateFns[t];
+    if (!fn) return;
+    fn();
+    setStatus('Loaded ' + t + ' template! Edit it however you want.', 2200);
+    pushHistory('Template: ' + t);
+    // Auto-fit camera to the new template
+    setTimeout(() => {
+      const all = [...sceneObjects];
+      if (all.length === 0) return;
+      const box = new THREE.Box3();
+      let first = true;
+      all.forEach(o => { const b = new THREE.Box3().setFromObject(o); if (first) { box.copy(b); first = false; } else box.union(b); });
+      const center = new THREE.Vector3(); box.getCenter(center);
+      const sz = new THREE.Vector3(); box.getSize(sz);
+      const r = Math.max(sz.x, sz.y, sz.z) * 1.6;
+      controls.target.copy(center);
+      camera.position.copy(center).add(new THREE.Vector3(r * 0.7, r * 0.7, r));
+      controls.update();
+      refreshSizeReadout();
+    }, 100);
+  });
+});
 
 </script>
 </body>
