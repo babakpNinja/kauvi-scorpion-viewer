@@ -129,11 +129,11 @@ app.post('/api/image', async (req, res) => {
         'authorization': 'Bearer ' + OPENAI_KEY
       },
       body: JSON.stringify({
-        model: 'dall-e-3',
+        model: 'gpt-image-1',
         prompt: wrapped,
         n: 1,
         size,
-        quality: 'standard'
+        quality: 'medium'
       })
     });
     if (!resp.ok) {
