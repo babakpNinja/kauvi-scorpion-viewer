@@ -207,6 +207,39 @@
     border:1px solid var(--line); border-radius:8px; cursor:pointer; font-size:12px;
   }
   #edit-panel .apply-row button.primary { border-color:var(--accent); color:var(--accent); }
+  #shape-palette {
+    position:absolute; top: calc(env(safe-area-inset-top, 0px) + 56px); left:14px;
+    display:flex; flex-direction:column; gap:6px; padding:8px;
+    background: rgba(17, 21, 26, 0.92); backdrop-filter: blur(10px);
+    border:1px solid var(--line); border-radius:12px; z-index:6;
+  }
+  #shape-palette button {
+    width:38px; height:38px; padding:0; font-size:18px;
+    background: transparent; color: var(--text);
+    border: 1px solid var(--line); border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition: background 100ms ease, border-color 100ms ease;
+  }
+  #shape-palette button:hover { background:#1a2129; border-color:var(--accent); color:var(--accent); }
+  /* When history panel shown, shift palette */
+  #history-panel.show ~ #shape-palette { display:none; }
+  #cam-bar {
+    position:absolute; top: calc(env(safe-area-inset-top, 0px) + 56px); right: 14px;
+    display:flex; flex-direction:column; gap:4px; padding:6px;
+    background: rgba(17,21,26,0.85); backdrop-filter: blur(10px);
+    border:1px solid var(--line); border-radius:10px; z-index:5;
+    font-size:11px;
+  }
+  #cam-bar button {
+    appearance:none; background:transparent; color:var(--text);
+    border:1px solid var(--line); border-radius:6px; padding:4px 8px;
+    cursor:pointer; min-width:60px; text-align:center;
+  }
+  #cam-bar button:hover { background:#1a2129; border-color:var(--accent); color:var(--accent); }
+  #cam-bar .row { display:flex; gap:4px; }
+  /* If edit panel is shown, push cam-bar down */
+  #edit-panel.show ~ #cam-bar { display:none; }
+
   @media (max-width: 480px) {
     #info { display:none; }
     header h1 { font-size:13px; }
@@ -224,6 +257,24 @@
   </header>
   <div id="stage">
     <div id="dropzone"></div>
+    <div id="shape-palette" title="Add primitive to scene">
+      <button data-shape="box" title="Box">⬜</button>
+      <button data-shape="sphere" title="Sphere">⚪</button>
+      <button data-shape="cylinder" title="Cylinder">⬛</button>
+      <button data-shape="cone" title="Cone">🔺</button>
+      <button data-shape="pyramid" title="Pyramid">🔻</button>
+      <button data-shape="torus" title="Torus">⭕</button>
+      <button data-shape="text" title="Text">🅰</button>
+    </div>
+
+    <div id="cam-bar">
+      <div class="row"><button data-view="top">Top</button><button data-view="bottom">Btm</button></div>
+      <div class="row"><button data-view="front">Frt</button><button data-view="back">Bck</button></div>
+      <div class="row"><button data-view="left">L</button><button data-view="right">R</button></div>
+      <button id="btn-ortho" title="Toggle Orthographic / Perspective">Persp</button>
+      <button id="btn-grid-toggle" title="Toggle Grid">Grid</button>
+    </div>
+
     <div id="info">
       <b>Drag</b> a 1-finger touch or mouse to rotate.<br>
       <b>Pinch</b> or scroll to zoom. <b>Two-finger drag</b> to pan.<br>
@@ -864,6 +915,129 @@ transformControls.addEventListener('mouseUp', () => pushHistory('Transform'));
 // Preload scorpion
 loadFromUrl('kauvi_scorpion.stl?v=' + Math.floor(Date.now()/60000), 'KAUVI scorpion');
 setTimeout(() => { if (mesh) pushHistory('Initial'); }, 4000);
+
+
+// === PHASE 2: PRIMITIVES + GRID + CAMERA VIEWS ===
+const sceneObjects = [];  // all editable meshes in scene
+
+// Grid floor
+const grid = new THREE.GridHelper(400, 40, 0x39e1c4, 0x1c232a);
+grid.position.y = -1.5;
+grid.material.opacity = 0.4;
+grid.material.transparent = true;
+scene.add(grid);
+
+document.getElementById('btn-grid-toggle').addEventListener('click', () => {
+  grid.visible = !grid.visible;
+  setStatus(grid.visible ? 'Grid ON' : 'Grid OFF', 900);
+});
+
+// Primitive factory
+function makePrimitive(kind, opts={}) {
+  let geom;
+  const c = opts.color || '#9aa4af';
+  const s = opts.size || 20;
+  switch (kind) {
+    case 'box':       geom = new THREE.BoxGeometry(s, s, s); break;
+    case 'sphere':    geom = new THREE.SphereGeometry(s/2, 24, 16); break;
+    case 'cylinder':  geom = new THREE.CylinderGeometry(s/2, s/2, s, 24); break;
+    case 'cone':      geom = new THREE.ConeGeometry(s/2, s, 24); break;
+    case 'pyramid':   geom = new THREE.ConeGeometry(s/Math.sqrt(2), s, 4); break;
+    case 'torus':     geom = new THREE.TorusGeometry(s/2, s/6, 16, 24); break;
+    case 'text':      geom = new THREE.BoxGeometry(s, s/3, s/4); break; // placeholder until font load
+    default: return null;
+  }
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(c), metalness: 0.4, roughness: 0.45,
+    emissive: 0x000000, emissiveIntensity: 0,
+  });
+  const m = new THREE.Mesh(geom, material);
+  m.castShadow = true;
+  m.userData = { kind, name: kind + '_' + (sceneObjects.length + 1) };
+  // Place on grid floor, offset to side so multiple shapes don't stack
+  const offset = sceneObjects.length * (s + 5);
+  m.position.set(offset - 60, s/2 - 1.5, 0);
+  scene.add(m);
+  sceneObjects.push(m);
+  return m;
+}
+
+document.querySelectorAll('#shape-palette button').forEach(b => {
+  b.addEventListener('click', () => {
+    const kind = b.dataset.shape;
+    const m = makePrimitive(kind);
+    if (m) {
+      // Select it: switch the gizmo target to this primitive
+      if (transformControls.object) transformControls.detach();
+      transformControls.attach(m);
+      transformControls.visible = true;
+      transformControls.enabled = true;
+      setStatus('Added ' + kind, 1200);
+      pushHistory('Add ' + kind);
+    }
+  });
+});
+
+// Raycaster: click to select any scene object
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', (ev) => {
+  if (transformControls.dragging) return;
+  if (ev.button !== 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const candidates = [...sceneObjects];
+  if (mesh) candidates.push(mesh);
+  const hits = raycaster.intersectObjects(candidates, false);
+  if (hits.length > 0) {
+    const t = hits[0].object;
+    if (transformControls.object) transformControls.detach();
+    transformControls.attach(t);
+    transformControls.visible = true;
+    transformControls.enabled = true;
+    setStatus('Selected ' + (t.userData.name || 'mesh'), 900);
+  }
+});
+
+// Six named camera views
+const camViews = {
+  top:    () => { camera.position.set(0, 250, 0.01); controls.target.set(0,0,0); },
+  bottom: () => { camera.position.set(0,-250, 0.01); controls.target.set(0,0,0); },
+  front:  () => { camera.position.set(0, 50, 250); controls.target.set(0,0,0); },
+  back:   () => { camera.position.set(0, 50,-250); controls.target.set(0,0,0); },
+  left:   () => { camera.position.set(-250, 50, 0); controls.target.set(0,0,0); },
+  right:  () => { camera.position.set( 250, 50, 0); controls.target.set(0,0,0); },
+};
+document.querySelectorAll('#cam-bar [data-view]').forEach(b => {
+  b.addEventListener('click', () => {
+    const fn = camViews[b.dataset.view];
+    if (fn) { fn(); controls.update(); setStatus('View: ' + b.dataset.view, 700); }
+  });
+});
+
+// Ortho / Perspective toggle (recreates camera, swaps OrbitControls camera)
+let isOrtho = false;
+document.getElementById('btn-ortho').addEventListener('click', () => {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const oldPos = camera.position.clone();
+  const oldTgt = controls.target.clone();
+  const newCam = isOrtho
+    ? new THREE.PerspectiveCamera(38, w/h, 0.1, 5000)
+    : (() => { const z = oldPos.length(); const f = 0.4; return new THREE.OrthographicCamera(-w*f*z/200, w*f*z/200, h*f*z/200, -h*f*z/200, 0.1, 5000); })();
+  newCam.position.copy(oldPos);
+  newCam.lookAt(oldTgt);
+  controls.object = newCam;
+  controls.target.copy(oldTgt);
+  // swap into closure-scope camera
+  Object.assign(camera, newCam); // shallow: not full safe but works for basic projection toggle
+  camera.updateProjectionMatrix();
+  isOrtho = !isOrtho;
+  document.getElementById('btn-ortho').textContent = isOrtho ? 'Ortho' : 'Persp';
+  setStatus(isOrtho ? 'Orthographic' : 'Perspective', 1000);
+});
+
 </script>
 </body>
 </html>
