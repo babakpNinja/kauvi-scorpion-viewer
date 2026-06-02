@@ -909,6 +909,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { Evaluator, Brush, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 
 const stage = document.getElementById('stage');
@@ -1554,7 +1556,33 @@ function makePrimitive(kind, opts={}) {
       geom.center();
       break;
     }
-    case 'text':       geom = new THREE.BoxGeometry(s, s/3, s/4); break;
+    case 'text': {
+      // v13: real extruded 3D text via TextGeometry. Use cached font if loaded,
+      // otherwise fall back to a flat placeholder that gets replaced later.
+      if (window._cachedFont) {
+        const txt = (opts.text || window._pendingText || 'KAUVI').slice(0, 20);
+        try {
+          geom = new TextGeometry(txt, {
+            font: window._cachedFont,
+            size: s * 0.7,
+            depth: s * 0.25,
+            curveSegments: 4,
+            bevelEnabled: true,
+            bevelThickness: s * 0.03,
+            bevelSize: s * 0.02,
+            bevelSegments: 2,
+          });
+          geom.center();
+        } catch (e) {
+          console.warn('text geom err', e);
+          geom = new THREE.BoxGeometry(s, s/3, s/4);
+        }
+      } else {
+        // placeholder while font loads
+        geom = new THREE.BoxGeometry(s, s/3, s/4);
+      }
+      break;
+    }
     default: return null;
   }
   const material = new THREE.MeshStandardMaterial({
@@ -1569,6 +1597,12 @@ function makePrimitive(kind, opts={}) {
   m.position.set(offset - 60, s/2 - 1.5, 0);
   scene.add(m);
   sceneObjects.push(m);
+  // v13: spring-pop animation on add (skip when applying snapshot — flag set externally)
+  if (!window._suppressAnimIn) {
+    m.userData._targetScale = m.scale.clone();
+    m.scale.set(0.001, 0.001, 0.001);
+    m.userData._animStart = performance.now();
+  }
   return m;
 }
 
@@ -3545,6 +3579,103 @@ window.executeCommands = function(plan) {
   };
 
   setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 0);
+})();
+
+
+// === V13: spring-pop animation tick + 3D text font loader + text prompt ===
+(function v13() {
+  // Animation tick: every frame, look for meshes with userData._animStart
+  function easeOutBack(p) {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+  }
+  function animTick() {
+    const now = performance.now();
+    const DUR = 360;
+    const candidates = [...sceneObjects];
+    if (mesh) candidates.push(mesh);
+    candidates.forEach(o => {
+      const start = o.userData?._animStart;
+      if (!start) return;
+      const target = o.userData._targetScale;
+      if (!target) { delete o.userData._animStart; return; }
+      const elapsed = now - start;
+      const p = Math.min(elapsed / DUR, 1);
+      const e = easeOutBack(p);
+      o.scale.set(target.x * e, target.y * e, target.z * e);
+      if (p >= 1) {
+        o.scale.copy(target);
+        delete o.userData._animStart;
+        delete o.userData._targetScale;
+      }
+    });
+    requestAnimationFrame(animTick);
+  }
+  requestAnimationFrame(animTick);
+
+  // Suppress animation when applying snapshots (load/share)
+  const origApply = window._applyShareSnapshot || applySnapshot;
+  window._applyShareSnapshot = function(snap) {
+    window._suppressAnimIn = true;
+    try { applySnapshot(snap); }
+    finally { setTimeout(() => { window._suppressAnimIn = false; }, 50); }
+    setStatus('Loaded shared project! 🔗', 2000);
+    pushHistory('Loaded share');
+  };
+  // Also wrap applySnapshot directly so internal callers (Load button) skip anim
+  const _origAS = applySnapshot;
+  window.applySnapshot = function(snap) {
+    window._suppressAnimIn = true;
+    try { return _origAS(snap); }
+    finally { setTimeout(() => { window._suppressAnimIn = false; }, 50); }
+  };
+
+  // 3D text: load helvetiker font once
+  const FONT_URL = 'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json';
+  const loader = new FontLoader();
+  loader.load(FONT_URL, font => {
+    window._cachedFont = font;
+    console.log('font loaded');
+    // Replace any placeholder text meshes already in sceneObjects (kind === 'text')
+    sceneObjects.filter(o => o.userData?.kind === 'text' && o.userData?._placeholder).forEach(o => {
+      try {
+        const txt = o.userData._text || 'KAUVI';
+        const s = 20;
+        const newGeom = new TextGeometry(txt, { font, size: s*0.7, depth: s*0.25, curveSegments: 4, bevelEnabled: true, bevelThickness: s*0.03, bevelSize: s*0.02, bevelSegments: 2 });
+        newGeom.center();
+        o.geometry.dispose();
+        o.geometry = newGeom;
+        delete o.userData._placeholder;
+      } catch (e) { console.warn('text replace', e); }
+    });
+  }, undefined, err => console.warn('font load fail', err));
+
+  // Patch the 'Text' shape button to ask the kid what to write
+  const textBtn = document.querySelector('#shape-palette [data-shape="text"]');
+  if (textBtn) {
+    textBtn.replaceWith(textBtn.cloneNode(true)); // strip existing handler
+    const fresh = document.querySelector('#shape-palette [data-shape="text"]');
+    fresh.addEventListener('click', () => {
+      const txt = (window.prompt('What should the text say?', 'KAUVI') || 'KAUVI').slice(0, 20).trim() || 'KAUVI';
+      window._pendingText = txt;
+      const m = makePrimitive('text', { text: txt });
+      if (m) {
+        // mark placeholder if font not loaded so we can replace later
+        if (!window._cachedFont) {
+          m.userData._placeholder = true;
+          m.userData._text = txt;
+        }
+        // Select it
+        if (typeof selectionClear === 'function') selectionClear();
+        if (typeof selectionAdd === 'function') selectionAdd(m, false);
+        beepAdd && beepAdd();
+        setStatus('Added text: ' + txt, 1500);
+        pushHistory('Add text: ' + txt);
+      }
+      window._pendingText = null;
+    });
+  }
 })();
 
 
