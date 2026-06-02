@@ -3564,7 +3564,11 @@ window.executeCommands = function(plan) {
       padding: '0',
       position: 'static',
       left: 'auto', right: 'auto', top: 'auto', bottom: 'auto',
+      transform: 'none',
       boxSizing: 'border-box',
+      background: 'transparent',
+      border: 'none',
+      backdropFilter: 'none',
     });
     // Ensure every chip is square + visible
     wrap.querySelectorAll('button').forEach(b => {
