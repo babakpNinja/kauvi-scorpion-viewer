@@ -3679,6 +3679,248 @@ window.executeCommands = function(plan) {
 })();
 
 
+// === V14: keyboard cheatsheet (?) + snapshot gallery ===
+(function v14() {
+  // ---- CSS ----
+  const css = document.createElement('style');
+  css.textContent = `
+    .kv-overlay {
+      position: fixed; inset: 0;
+      background: rgba(11, 13, 16, 0.45);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none; align-items: center; justify-content: center;
+      padding: 20px;
+      opacity: 0; transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .kv-overlay.show { display: flex; opacity: 1; }
+    .kv-modal {
+      background: white; color: #0b0d10;
+      border-radius: 16px;
+      max-width: 620px; width: 100%;
+      max-height: 86vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      padding: 22px 26px;
+      transform: scale(0.95); opacity: 0;
+      transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease;
+    }
+    .kv-overlay.show .kv-modal { transform: scale(1); opacity: 1; }
+    .kv-modal h2 {
+      margin: 0 0 14px 0; font-size: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .kv-modal h2 .close {
+      background: transparent; border: none; cursor: pointer; font-size: 22px;
+      color: #6b7280; padding: 0 6px; line-height: 1;
+    }
+    .kv-modal h2 .close:hover { color: #ef4444; }
+    .kv-modal h3 {
+      margin: 16px 0 8px 0; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.06em; color: #7c5cff;
+    }
+    .kv-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 6px 8px; border-radius: 8px;
+    }
+    .kv-row:hover { background: #f3f6fa; }
+    .kv-row .keys { flex: 0 0 auto; display: flex; gap: 4px; align-items: center; }
+    .kv-row kbd {
+      display: inline-block;
+      font-family: ui-monospace, SF Mono, monospace; font-size: 11px;
+      background: linear-gradient(180deg, white, #f3f6fa);
+      border: 1px solid #d6dbe1; border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 3px 7px; min-width: 18px;
+      text-align: center; color: #0b0d10;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    }
+    .kv-row .plus { color: #9ca3af; font-size: 11px; }
+    .kv-row .desc { flex: 1; font-size: 13px; color: #4b5563; }
+    /* Gallery grid */
+    .gal-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin-top: 10px;
+    }
+    .gal-tile {
+      background: #f3f6fa; border: 1px solid #d6dbe1; border-radius: 10px;
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .gal-tile img { width: 100%; aspect-ratio: 16/10; object-fit: cover; cursor: pointer; }
+    .gal-tile .meta { padding: 6px 8px; font-size: 11px; color: #4b5563; }
+    .gal-tile .meta b { color: #0b0d10; display: block; margin-bottom: 2px; font-size: 12px; }
+    .gal-tile .actions { display: flex; gap: 4px; padding: 4px 6px 6px; }
+    .gal-tile .actions button {
+      flex: 1; background: white; border: 1px solid #d6dbe1; color: #0b0d10;
+      padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px;
+    }
+    .gal-tile .actions button:hover { background: #eef2f5; }
+    .gal-tile .actions button.del:hover { background: #fee2e2; color: #b91c1c; }
+    .gal-empty { text-align: center; padding: 30px; color: #6b7280; font-size: 13px; }
+    @media (max-width: 640px) {
+      .gal-grid { grid-template-columns: 1fr; }
+    }
+  `;
+  document.head.appendChild(css);
+
+  // ---- KEYBOARD CHEATSHEET ----
+  const kbdOverlay = document.createElement('div');
+  kbdOverlay.id = 'kbd-overlay'; kbdOverlay.className = 'kv-overlay';
+  kbdOverlay.innerHTML = `
+    <div class="kv-modal" role="dialog" aria-labelledby="kbd-title">
+      <h2 id="kbd-title">⌨ Keyboard Shortcuts <button class="close" aria-label="Close">×</button></h2>
+
+      <h3>Edit</h3>
+      <div class="kv-row"><div class="keys"><kbd>⌘</kbd><span class="plus">/</span><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Z</kbd></div><div class="desc">Undo</div></div>
+      <div class="kv-row"><div class="keys"><kbd>⌘</kbd><span class="plus">/</span><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>Z</kbd></div><div class="desc">Redo</div></div>
+      <div class="kv-row"><div class="keys"><kbd>D</kbd></div><div class="desc">Duplicate selected</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Delete</kbd><span class="plus">/</span><kbd>⌫</kbd></div><div class="desc">Delete selected</div></div>
+      <div class="kv-row"><div class="keys"><kbd>M</kbd></div><div class="desc">Mirror selected on X</div></div>
+
+      <h3>Build &amp; Boolean</h3>
+      <div class="kv-row"><div class="keys"><kbd>⌘</kbd><span class="plus">/</span><kbd>Ctrl</kbd><span class="plus">+</span><kbd>G</kbd></div><div class="desc">Group selected</div></div>
+      <div class="kv-row"><div class="keys"><kbd>⌘</kbd><span class="plus">/</span><kbd>Ctrl</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>G</kbd></div><div class="desc">Ungroup selected</div></div>
+      <div class="kv-row"><div class="keys"><kbd>G</kbd></div><div class="desc">Toggle Snap to grid</div></div>
+
+      <h3>Selection</h3>
+      <div class="kv-row"><div class="keys"><kbd>Click</kbd></div><div class="desc">Select a shape</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Shift</kbd><span class="plus">+</span><kbd>Click</kbd></div><div class="desc">Add or remove from selection</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Click empty</kbd></div><div class="desc">Deselect everything</div></div>
+
+      <h3>Camera</h3>
+      <div class="kv-row"><div class="keys"><kbd>Drag</kbd></div><div class="desc">Rotate the view</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Scroll</kbd></div><div class="desc">Zoom in / out</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Right-drag</kbd></div><div class="desc">Pan the view</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Middle-click</kbd></div><div class="desc">Dolly the view</div></div>
+
+      <h3>Misc</h3>
+      <div class="kv-row"><div class="keys"><kbd>?</kbd></div><div class="desc">Show this guide</div></div>
+      <div class="kv-row"><div class="keys"><kbd>Esc</kbd></div><div class="desc">Close any modal</div></div>
+    </div>`;
+  document.body.appendChild(kbdOverlay);
+  function openKbd() { kbdOverlay.classList.add('show'); }
+  function closeKbd() { kbdOverlay.classList.remove('show'); }
+  kbdOverlay.querySelector('.close').addEventListener('click', closeKbd);
+  kbdOverlay.addEventListener('click', e => { if (e.target === kbdOverlay) closeKbd(); });
+  document.addEventListener('keydown', e => {
+    if (e.target && e.target.matches('input,textarea,select')) return;
+    if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); openKbd(); }
+    else if (e.key === 'Escape') { closeKbd(); closeGallery(); }
+  });
+
+  // ---- SNAPSHOT GALLERY ----
+  const SNAPS_KEY = 'kauvi-snapshots';
+  const MAX_SNAPS = 20;
+  function loadSnaps() {
+    try { const v = JSON.parse(localStorage.getItem(SNAPS_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  }
+  function saveSnaps(arr) {
+    try { localStorage.setItem(SNAPS_KEY, JSON.stringify(arr)); } catch(e) { setStatus('Storage full', 1800); }
+  }
+  function takeSnapshot() {
+    try {
+      // Force a render so we capture latest frame
+      renderer.render(scene, camera);
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      const defaultName = 'Build ' + new Date().toLocaleString().replace(/[\/,:]/g, '-');
+      const name = (window.prompt('Name this snapshot:', defaultName) || defaultName).slice(0, 50).trim() || defaultName;
+      const snaps = loadSnaps();
+      snaps.unshift({ id: 's' + performance.now().toString(36).replace('.', ''), name, dataUrl, savedAt: new Date().toISOString() });
+      while (snaps.length > MAX_SNAPS) snaps.pop();
+      saveSnaps(snaps);
+      setStatus('Snapshot saved! 📸', 1500);
+      pushHistory('Snapshot: ' + name);
+      beepSave && beepSave();
+    } catch (e) { console.error(e); setStatus('Snapshot failed: ' + e.message, 2200); }
+  }
+  function downloadSnapshot(snap) {
+    const a = document.createElement('a');
+    a.href = snap.dataUrl;
+    a.download = snap.name.replace(/[^\w\d._-]+/g, '_') + '.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+  function deleteSnapshot(id) {
+    const snaps = loadSnaps().filter(s => s.id !== id);
+    saveSnaps(snaps);
+    renderGallery();
+  }
+
+  const galOverlay = document.createElement('div');
+  galOverlay.id = 'gal-overlay'; galOverlay.className = 'kv-overlay';
+  galOverlay.innerHTML = `
+    <div class="kv-modal" role="dialog" aria-labelledby="gal-title">
+      <h2 id="gal-title">🖼 My Snapshots <button class="close" aria-label="Close">×</button></h2>
+      <p style="font-size:12px; color:#6b7280; margin: 4px 0 0;">Click a thumbnail to view fullsize. Keeps the last 20 snapshots in your browser.</p>
+      <div id="gal-body"></div>
+    </div>`;
+  document.body.appendChild(galOverlay);
+  galOverlay.querySelector('.close').addEventListener('click', closeGallery);
+  galOverlay.addEventListener('click', e => { if (e.target === galOverlay) closeGallery(); });
+  function closeGallery() { galOverlay.classList.remove('show'); }
+  function openGallery() { renderGallery(); galOverlay.classList.add('show'); }
+  function renderGallery() {
+    const body = document.getElementById('gal-body');
+    const snaps = loadSnaps();
+    if (snaps.length === 0) {
+      body.innerHTML = '<div class="gal-empty">No snapshots yet. Tap 📸 Snapshot in the header to capture your build.</div>';
+      return;
+    }
+    body.innerHTML = '<div class="gal-grid">' + snaps.map(s => `
+      <div class="gal-tile" data-id="${s.id}">
+        <img src="${s.dataUrl}" alt="${s.name}" data-view>
+        <div class="meta"><b>${s.name.replace(/</g,'&lt;')}</b>${new Date(s.savedAt).toLocaleString()}</div>
+        <div class="actions">
+          <button data-act="dl">⬇ Save</button>
+          <button data-act="del" class="del">🗑 Del</button>
+        </div>
+      </div>
+    `).join('') + '</div>';
+    body.querySelectorAll('.gal-tile').forEach(tile => {
+      const id = tile.dataset.id;
+      const snap = snaps.find(s => s.id === id);
+      tile.querySelector('[data-view]').addEventListener('click', () => { window.open(snap.dataUrl, '_blank'); });
+      tile.querySelector('[data-act="dl"]').addEventListener('click', () => downloadSnapshot(snap));
+      tile.querySelector('[data-act="del"]').addEventListener('click', () => deleteSnapshot(id));
+    });
+  }
+
+  // ---- Inject header buttons (📸 Snapshot, 🖼 Gallery, ⌨ Shortcuts) ----
+  function injectHeaderButtons() {
+    const hdr = document.getElementById('hdr-bar');
+    if (!hdr || document.getElementById('hb-snap')) return;
+    const sep = document.createElement('span'); sep.className = 'hdr-sep';
+    const snapBtn = document.createElement('button');
+    snapBtn.id = 'hb-snap'; snapBtn.title = 'Capture screenshot'; snapBtn.innerHTML = '📸';
+    snapBtn.addEventListener('click', takeSnapshot);
+    const galBtn = document.createElement('button');
+    galBtn.id = 'hb-gal'; galBtn.title = 'My snapshot gallery'; galBtn.innerHTML = '🖼';
+    galBtn.addEventListener('click', openGallery);
+    const kbdBtn = document.createElement('button');
+    kbdBtn.id = 'hb-kbd'; kbdBtn.title = 'Keyboard shortcuts (?)'; kbdBtn.innerHTML = '⌨';
+    kbdBtn.addEventListener('click', openKbd);
+    // insert before the existing Help button
+    const helpBtn = document.getElementById('hb-help');
+    if (helpBtn) {
+      hdr.insertBefore(sep, helpBtn);
+      hdr.insertBefore(snapBtn, helpBtn);
+      hdr.insertBefore(galBtn, helpBtn);
+      hdr.insertBefore(kbdBtn, helpBtn);
+    } else {
+      hdr.appendChild(snapBtn); hdr.appendChild(galBtn); hdr.appendChild(kbdBtn);
+    }
+  }
+  let tries = 0;
+  function tryInject() {
+    if (document.getElementById('hb-snap')) return;
+    injectHeaderButtons();
+    if (document.getElementById('hb-snap')) return;
+    if (++tries < 30) setTimeout(tryInject, 200);
+  }
+  tryInject();
+  window.addEventListener('load', tryInject);
+})();
+
+
 // === V12.1: Fix color chip layout (some were rendered off-left) + add 10 vibrant colors ===
 (function fixColorChips() {
   function applyFix() {
