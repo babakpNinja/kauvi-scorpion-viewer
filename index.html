@@ -4782,8 +4782,24 @@ window.executeCommands = function(plan) {
   setInterval(wireAutoClose, 2000);
 
   // Make ref-launcher visible on mobile (was display:none in v8)
+  // Wrap its text in a span.label so the mobile CSS rule that hides labels catches it.
   const refLauncher = document.getElementById('ref-launcher');
-  if (refLauncher) refLauncher.style.display = '';
+  if (refLauncher) {
+    refLauncher.style.display = '';
+    if (!refLauncher.dataset.v15Wrapped) {
+      refLauncher.dataset.v15Wrapped = '1';
+      const txt = (refLauncher.textContent || '').trim();
+      const m = txt.match(/^(\S+)\s+(.+)$/);
+      if (m) refLauncher.innerHTML = `<span class="emoji">${m[1]}</span> <span class="label">${m[2]}</span>`;
+    }
+  }
+  const aiLauncher = document.getElementById('ai-launcher');
+  if (aiLauncher && !aiLauncher.dataset.v15Wrapped) {
+    aiLauncher.dataset.v15Wrapped = '1';
+    const txt = (aiLauncher.textContent || '').trim();
+    const m = txt.match(/^(\S+)\s+(.+)$/);
+    if (m) aiLauncher.innerHTML = `<span class="emoji">${m[1]}</span> <span class="label">${m[2]}</span>`;
+  }
 
   // Force three.js canvas resize on viewport change (the canvas was overflowing on iPhone)
   window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 200));
