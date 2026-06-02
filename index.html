@@ -707,6 +707,7 @@
           <div id="ai-chat-title">🤖 AI Assistant</div>
           <div class="sub">Sonnet 4.6 builds shapes from your ask</div>
         </div>
+        <button id="ai-tts-toggle" title="Voice on/off">🔈</button>
         <button id="ai-chat-close" title="Close">×</button>
       </div>
       <div id="ai-chat-body"></div>
@@ -2800,6 +2801,186 @@ if (examplesEl && !examplesEl.dataset.v9) {
     sendAI();
   });
 }
+
+
+// === V10: VOICE OUTPUT (speechSynthesis) ===
+const TTS_KEY = 'kauvi-tts';
+let ttsOn = localStorage.getItem(TTS_KEY) !== '0';
+const ttsBtn = document.getElementById('ai-tts-toggle');
+const synth = window.speechSynthesis;
+if (!synth && ttsBtn) ttsBtn.style.display = 'none';
+function pickVoice() {
+  if (!synth) return null;
+  const voices = synth.getVoices();
+  if (!voices.length) return null;
+  const prefer = ['Google US English', 'Samantha', 'Microsoft Aria', 'Karen', 'Victoria', 'Alex'];
+  for (const name of prefer) {
+    const v = voices.find(v => v.name && v.name.includes(name));
+    if (v) return v;
+  }
+  return voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+}
+let cachedVoice = null;
+if (synth) {
+  cachedVoice = pickVoice();
+  synth.onvoiceschanged = () => { cachedVoice = pickVoice(); };
+}
+function speakAI(text) {
+  if (!ttsOn || !synth || !text) return;
+  try {
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(String(text).slice(0, 280));
+    if (cachedVoice) u.voice = cachedVoice;
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 0.9;
+    synth.speak(u);
+  } catch (e) { console.warn('tts err', e); }
+}
+function refreshTtsBtn() { if (ttsBtn) ttsBtn.textContent = ttsOn ? '🔈' : '🔇'; }
+refreshTtsBtn();
+if (ttsBtn) ttsBtn.addEventListener('click', () => {
+  ttsOn = !ttsOn;
+  localStorage.setItem(TTS_KEY, ttsOn ? '1' : '0');
+  refreshTtsBtn();
+  if (!ttsOn && synth) synth.cancel();
+  setStatus(ttsOn ? 'Voice on 🔈' : 'Voice off 🔇', 1000);
+});
+
+// Hook into existing sendAI by wrapping fetch flow: after assistant reply renders, speak it.
+// We monkey-patch by listening for new assistant bubbles via MutationObserver.
+const aiObserver = new MutationObserver(muts => {
+  for (const m of muts) {
+    for (const node of m.addedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (node.classList?.contains('ai-bubble') && node.classList.contains('assistant') && !node.classList.contains('thinking')) {
+        // Find the main text node (last div without 'who' or 'cmds' class)
+        const txt = Array.from(node.querySelectorAll('div')).filter(d => !d.classList.contains('who') && !d.classList.contains('cmds')).pop();
+        const text = (txt?.textContent || node.textContent || '').replace('🤖 AI', '').trim();
+        // Skip the initial greeting only once on first render
+        if (text && !node.dataset._spoken) {
+          node.dataset._spoken = '1';
+          // Small delay so the cancel doesn't kill itself
+          setTimeout(() => speakAI(text), 60);
+        }
+      }
+    }
+  }
+});
+if (aiBody) aiObserver.observe(aiBody, { childList: true });
+
+
+// === V10: PRINT ESTIMATOR PANEL ===
+function meshVolumeMm3(obj) {
+  // Compute volume of obj.geometry in world coords. Volume = sum of signed tetra volumes from origin.
+  if (!obj || !obj.geometry) return 0;
+  obj.updateMatrixWorld(true);
+  const geom = obj.geometry;
+  const pos = geom.attributes.position;
+  if (!pos) return 0;
+  const m = obj.matrixWorld;
+  const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+  let vol = 0;
+  if (geom.index) {
+    const idx = geom.index.array;
+    for (let i = 0; i < idx.length; i += 3) {
+      va.fromBufferAttribute(pos, idx[i]).applyMatrix4(m);
+      vb.fromBufferAttribute(pos, idx[i+1]).applyMatrix4(m);
+      vc.fromBufferAttribute(pos, idx[i+2]).applyMatrix4(m);
+      vol += va.dot(new THREE.Vector3().crossVectors(vb, vc));
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      va.fromBufferAttribute(pos, i).applyMatrix4(m);
+      vb.fromBufferAttribute(pos, i+1).applyMatrix4(m);
+      vc.fromBufferAttribute(pos, i+2).applyMatrix4(m);
+      vol += va.dot(new THREE.Vector3().crossVectors(vb, vc));
+    }
+  }
+  return Math.abs(vol) / 6;
+}
+function totalSceneVolumeMm3() {
+  const targets = [...sceneObjects];
+  if (mesh) targets.push(mesh);
+  let total = 0;
+  targets.forEach(o => {
+    if (!o || o.visible === false) return;
+    if (o.children && o.children.length && !o.geometry) {
+      // group
+      o.children.forEach(c => { total += meshVolumeMm3(c); });
+    } else {
+      total += meshVolumeMm3(o);
+    }
+  });
+  return total;
+}
+function formatPrintEstimate(volMm3) {
+  if (!volMm3 || volMm3 < 1) {
+    return { volume: '—', filament: '—', weight: '—', cost: '—', time: '—' };
+  }
+  const volCm3 = volMm3 / 1000;
+  // PLA filament: 1.75 mm dia → cross section = π*(0.875)² ≈ 2.405 mm²
+  const lenM = (volMm3 / 2.405) / 1000;
+  const weightG = volCm3 * 1.24;
+  const costUsd = weightG * 0.025; // $25/kg
+  const timeMin = volCm3 * 0.6;
+  const fmt = n => Math.round(n * 10) / 10;
+  let timeStr;
+  if (timeMin < 60) timeStr = fmt(timeMin) + ' min';
+  else timeStr = fmt(timeMin/60) + ' hr';
+  return {
+    volume: fmt(volCm3) + ' cm³',
+    filament: fmt(lenM) + ' m',
+    weight: fmt(weightG) + ' g',
+    cost: '$' + (Math.round(costUsd * 100) / 100).toFixed(2),
+    time: timeStr,
+  };
+}
+// Build the estimator panel and inject into right sidebar Edit tab (above #edit-panel)
+function buildPrintEstimatorUI() {
+  const target = document.getElementById('rs-edit') || document.getElementById('pane-properties');
+  if (!target || document.getElementById('print-est')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'print-est-wrap';
+  wrap.innerHTML = `
+    <h4 style="margin:4px 0 8px 0; font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#6b7280; font-weight:700;">🖨 Print Estimate (PLA)</h4>
+    <div id="print-est">
+      <div class="pe-row"><b>Volume</b><span id="pe-vol">—</span></div>
+      <div class="pe-row"><b>Filament</b><span id="pe-fil">—</span></div>
+      <div class="pe-row"><b>Weight</b><span id="pe-w">—</span></div>
+      <div class="pe-row"><b>Cost</b><span id="pe-c">—</span></div>
+      <div class="pe-row"><b>Time</b><span id="pe-t">—</span></div>
+    </div>
+    <div style="font-size:9px; color:#9ca3af; margin-top:4px; font-style:italic;">Assumes 1.75mm PLA, 1.24g/cm³, $25/kg, 0.2mm layers.</div>
+    <div style="border-bottom:1px dashed #d6dbe1; margin:10px 0;"></div>
+  `;
+  // Insert as first child of target so it appears above the existing edit panel content
+  target.insertBefore(wrap, target.firstChild);
+  // Style
+  const style = document.createElement('style');
+  style.textContent = `
+    #print-est { display: flex; flex-direction: column; gap: 3px; font-family: ui-monospace, monospace; font-size: 11px; }
+    #print-est .pe-row { display: flex; justify-content: space-between; padding: 3px 7px; background: #f3f6fa; border-radius: 4px; }
+    #print-est .pe-row b { color: #0b0d10; font-weight: 600; }
+    #print-est .pe-row span { color: #1f6aa5; font-weight: 600; }
+  `;
+  document.head.appendChild(style);
+}
+buildPrintEstimatorUI();
+
+function refreshPrintEstimate() {
+  if (!document.getElementById('pe-vol')) return;
+  try {
+    const v = totalSceneVolumeMm3();
+    const e = formatPrintEstimate(v);
+    document.getElementById('pe-vol').textContent = e.volume;
+    document.getElementById('pe-fil').textContent = e.filament;
+    document.getElementById('pe-w').textContent = e.weight;
+    document.getElementById('pe-c').textContent = e.cost;
+    document.getElementById('pe-t').textContent = e.time;
+  } catch (err) { console.warn('estimator', err); }
+}
+setInterval(refreshPrintEstimate, 1500);
+transformControls.addEventListener('objectChange', refreshPrintEstimate);
+refreshPrintEstimate();
 
 
 // === V6: REFERENCE IMAGE PANEL (DALL-E 3 via /api/image) ===
