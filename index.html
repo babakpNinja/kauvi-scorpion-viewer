@@ -4336,6 +4336,470 @@ window.executeCommands = function(plan) {
   refreshCtxVisibility();
 })();
 
+
+// === V15: mobile-first redesign — bottom sheet, FAB cluster, hamburger, Simple/Advanced mode ===
+(function v15Mobile() {
+  const css = document.createElement('style');
+  css.id = 'v15-mobile-css';
+  css.textContent = `
+    :root {
+      --v15-mobile-bp: 760px;
+      --v15-tap: 44px;
+    }
+    /* Hide old chevrons — replaced by bottom sheet + hamburger */
+    @media (max-width: 760px) {
+      #lcol, #rcol { display: none !important; }
+      /* Force compact header layout */
+      #app > header { padding: 0 8px !important; gap: 8px !important; height: 48px !important; min-height: 48px; }
+      #app > header h1 { font-size: 13px !important; flex: 0 0 auto !important; white-space: nowrap; }
+      #app > header h1 span { font-size: 14px !important; }
+      #app > header .badge { display: none !important; }
+      #hdr-bar { gap: 2px !important; }
+      /* Hide most hdr-bar buttons on mobile — they live in the hamburger menu */
+      #hdr-bar > button:not(#v15-burger):not(#hb-help),
+      #hdr-bar > .menu-host,
+      #hdr-bar > select,
+      #hdr-bar > .hdr-sep { display: none !important; }
+      #hdr-bar { justify-content: flex-end !important; }
+      #hb-help, #v15-burger {
+        width: 40px !important; height: 40px !important;
+        padding: 0 !important; font-size: 20px !important;
+        display: flex !important; align-items: center; justify-content: center;
+        border: 1px solid #d6dbe1 !important; border-radius: 10px !important;
+      }
+      /* App grid: header / stage / nothing — bottom sheet floats */
+      #app { grid-template-rows: 48px 1fr 0 !important; grid-template-areas: "header" "stage" "tools" !important; grid-template-columns: 1fr !important; }
+      #lsb, #rsb { display: none !important; }
+      #toolbar { display: none !important; }
+      #stage { overflow: hidden !important; }
+      /* Bigger ctx-bar tap targets, full-width pill */
+      #ctx-bar {
+        left: 8px !important; right: 8px !important;
+        transform: translateY(20px) !important;
+        bottom: 88px !important;
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 6px !important;
+        white-space: nowrap;
+      }
+      #ctx-bar.show { transform: translateY(0) !important; }
+      #ctx-bar button { min-width: 40px !important; min-height: 40px !important; padding: 8px 10px !important; font-size: 14px !important; }
+      #ctx-bar .ctx-group-label { display: none !important; }
+      #ctx-bar .ctx-sep { display: none !important; }
+      /* Floating chat / image / snap launchers — left side, stacked */
+      #ai-launcher, #ref-launcher {
+        position: fixed !important;
+        bottom: 18px !important; right: 18px !important;
+        width: 56px !important; height: 56px !important;
+        padding: 0 !important;
+        font-size: 24px !important;
+        border-radius: 28px !important;
+        display: flex !important; align-items: center; justify-content: center;
+        z-index: 25 !important;
+      }
+      #ai-launcher .label, #ref-launcher .label { display: none !important; }
+      #ref-launcher { bottom: 84px !important; }
+      #ai-chat-panel, #ref-panel { width: calc(100vw - 12px) !important; max-width: 100vw !important; left: 6px !important; right: 6px !important; bottom: 12px !important; top: 56px !important; max-height: calc(100vh - 68px) !important; height: auto !important; border-radius: 18px !important; }
+      /* Status banner positioning */
+      #status { left: 50% !important; right: auto !important; transform: translateX(-50%) !important; max-width: 88vw; text-align: center; top: 56px !important; }
+    }
+
+    /* === Bottom sheet (mobile only) === */
+    #v15-fab {
+      position: fixed;
+      bottom: 18px; left: 18px;
+      width: 64px; height: 64px;
+      border-radius: 32px;
+      background: linear-gradient(135deg, #7c5cff, #39e1c4);
+      color: white;
+      font-size: 32px; font-weight: 600;
+      border: none;
+      box-shadow: 0 6px 20px rgba(124, 92, 255, 0.45);
+      cursor: pointer;
+      z-index: 26;
+      display: none;
+      align-items: center; justify-content: center;
+      transition: transform 200ms var(--ease, cubic-bezier(0.4,0,0.2,1)), box-shadow 200ms ease;
+    }
+    #v15-fab:active { transform: scale(0.93); }
+    #v15-fab.expanded { transform: rotate(45deg); }
+    @media (max-width: 760px) { #v15-fab { display: flex; } }
+
+    #v15-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms var(--ease, cubic-bezier(0.4,0,0.2,1));
+      z-index: 30;
+    }
+    #v15-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    #v15-sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: white;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -8px 30px rgba(0,0,0,0.18);
+      transform: translateY(110%);
+      transition: transform 280ms var(--ease, cubic-bezier(0.4,0,0.2,1));
+      z-index: 31;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    #v15-sheet.open { transform: translateY(0); }
+    #v15-sheet .handle {
+      width: 40px; height: 4px;
+      background: #d6dbe1;
+      border-radius: 2px;
+      margin: 10px auto 6px;
+      flex: 0 0 auto;
+    }
+    #v15-sheet .tabs {
+      display: flex; gap: 6px; padding: 6px 12px 0;
+      border-bottom: 1px solid #eef2f5;
+      flex: 0 0 auto;
+    }
+    #v15-sheet .tabs button {
+      flex: 1;
+      background: transparent; border: none;
+      padding: 12px 4px; font-size: 14px; font-weight: 600;
+      color: #6b7280;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -1px;
+      transition: color 150ms ease, border-color 150ms ease;
+    }
+    #v15-sheet .tabs button.active { color: #7c5cff; border-color: #7c5cff; }
+    #v15-sheet .panes {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 14px 14px 24px;
+      -webkit-overflow-scrolling: touch;
+    }
+    #v15-sheet .pane { display: none; }
+    #v15-sheet .pane.active { display: block; }
+    /* Make shapes/templates/colors render BIG inside sheet */
+    #v15-sheet #shape-palette { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 10px !important; }
+    #v15-sheet #shape-palette button { min-height: 64px !important; font-size: 18px !important; border-radius: 14px !important; }
+    #v15-sheet #templates { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    #v15-sheet #templates button { min-height: 60px !important; font-size: 15px !important; border-radius: 14px !important; }
+    #v15-sheet #color-chips { display: grid !important; grid-template-columns: repeat(5, 1fr) !important; gap: 10px !important; transform: none !important; left: auto !important; position: static !important; width: 100% !important; }
+    #v15-sheet #color-chips button { min-height: 48px !important; min-width: 48px !important; border-radius: 12px !important; border: 2px solid rgba(0,0,0,0.06) !important; }
+    #v15-sheet h4 { margin: 0 0 10px; color: #6b7280; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* === Hamburger menu (mobile only) === */
+    #v15-menu {
+      position: fixed;
+      top: 56px;
+      right: 8px;
+      width: 240px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #d6dbe1;
+      border-radius: 14px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+      opacity: 0;
+      transform: translateY(-10px) scale(0.96);
+      pointer-events: none;
+      transition: opacity 180ms var(--ease, cubic-bezier(0.4,0,0.2,1)), transform 180ms var(--ease, cubic-bezier(0.4,0,0.2,1));
+      z-index: 32;
+      padding: 8px;
+    }
+    #v15-menu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+    #v15-menu .row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #0b0d10;
+      user-select: none;
+    }
+    #v15-menu .row:hover, #v15-menu .row:active { background: #eef2f5; }
+    #v15-menu .row .icon { width: 22px; text-align: center; font-size: 17px; }
+    #v15-menu .row .label { flex: 1; }
+    #v15-menu .sep { height: 1px; background: #eef2f5; margin: 6px 4px; }
+    #v15-menu .group-label { padding: 6px 10px 2px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; font-weight: 700; }
+    #v15-menu select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #d6dbe1; }
+    #v15-menu .switch {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 10px; border-radius: 10px; cursor: pointer;
+    }
+    #v15-menu .switch:hover { background: #eef2f5; }
+    #v15-menu .switch .pill {
+      width: 38px; height: 22px; background: #d6dbe1; border-radius: 11px; position: relative;
+      transition: background 160ms ease;
+    }
+    #v15-menu .switch .pill::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 9px; background: white;
+      transition: left 160ms var(--ease, cubic-bezier(0.4,0,0.2,1));
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    #v15-menu .switch.on .pill { background: #7c5cff; }
+    #v15-menu .switch.on .pill::after { left: 18px; }
+
+    /* === Progressive disclosure: Simple mode hides advanced features === */
+    body.simple-mode .v15-advanced { display: none !important; }
+    body.simple-mode #v15-sheet .tabs [data-tab="templates"] { display: block; }
+
+    /* Desktop: hide mobile bottom-sheet bits but keep them for resize transitions */
+    @media (min-width: 761px) {
+      #v15-fab, #v15-backdrop, #v15-sheet, #v15-menu, #v15-burger { display: none !important; }
+    }
+  `;
+  document.head.appendChild(css);
+
+  // -- Hamburger button in header --
+  const burger = document.createElement('button');
+  burger.id = 'v15-burger';
+  burger.title = 'Menu';
+  burger.innerHTML = '☰';
+  const hdrBar = document.getElementById('hdr-bar');
+  if (hdrBar) hdrBar.appendChild(burger);
+
+  // -- Hamburger menu panel --
+  const menu = document.createElement('div');
+  menu.id = 'v15-menu';
+  menu.innerHTML = `
+    <div class="group-label">Edit</div>
+    <div class="row" data-act="undo"><span class="icon">↶</span><span class="label">Undo</span></div>
+    <div class="row" data-act="redo"><span class="icon">↷</span><span class="label">Redo</span></div>
+    <div class="sep"></div>
+    <div class="group-label">File</div>
+    <div class="row" data-act="save"><span class="icon">💾</span><span class="label">Save to slot</span></div>
+    <div class="row" data-act="load"><span class="icon">📂</span><span class="label">Load from slot</span></div>
+    <div class="row" style="padding:8px 10px"><span class="icon">🎰</span><select id="v15-slot"><option value="1">Slot 1</option><option value="2">Slot 2</option><option value="3">Slot 3</option></select></div>
+    <div class="row" data-act="open"><span class="icon">📁</span><span class="label">Open STL file...</span></div>
+    <div class="row" data-act="download"><span class="icon">⬇</span><span class="label">Download model STL</span></div>
+    <div class="row" data-act="print-stl"><span class="icon">🖨</span><span class="label">Print full scene STL</span></div>
+    <div class="row" data-act="export-project"><span class="icon">📦</span><span class="label">Download project</span></div>
+    <div class="row" data-act="share"><span class="icon">🔗</span><span class="label">Get share link</span></div>
+    <div class="sep"></div>
+    <div class="group-label">Photo</div>
+    <div class="row" data-act="snap"><span class="icon">📸</span><span class="label">Take snapshot</span></div>
+    <div class="row" data-act="gallery"><span class="icon">🖼</span><span class="label">My gallery</span></div>
+    <div class="sep"></div>
+    <div class="group-label">Help</div>
+    <div class="row" data-act="kbd"><span class="icon">⌨</span><span class="label">Keyboard shortcuts</span></div>
+    <div class="row" data-act="mute"><span class="icon" id="v15-mute-icon">🔊</span><span class="label">Mute / unmute sound</span></div>
+    <div class="sep"></div>
+    <div class="group-label">Mode</div>
+    <div class="switch" id="v15-adv-toggle">
+      <span><strong>Advanced mode</strong><div style="font-size:11px;color:#6b7280">Show Group, CSG, Align, Materials</div></span>
+      <div class="pill"></div>
+    </div>
+  `;
+  document.body.appendChild(menu);
+
+  burger.addEventListener('click', e => {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => menu.classList.remove('open'));
+  menu.addEventListener('click', e => e.stopPropagation());
+
+  const fwd = id => () => document.getElementById(id)?.click();
+  menu.querySelectorAll('.row[data-act]').forEach(row => {
+    row.addEventListener('click', () => {
+      menu.classList.remove('open');
+      const act = row.dataset.act;
+      const map = {
+        undo: 'btn-undo', redo: 'btn-redo',
+        save: 'btn-save', load: 'btn-load',
+        download: 'btn-download', 'print-stl': 'btn-export-stl',
+        'export-project': 'btn-export-project', share: 'btn-share',
+        snap: 'hb-snap', gallery: 'hb-gal',
+        kbd: 'hb-kbd', mute: 'btn-mute',
+      };
+      if (act === 'open') document.getElementById('fileinput')?.click();
+      else if (map[act]) fwd(map[act])();
+      if (act === 'mute') {
+        setTimeout(() => {
+          const txt = (document.getElementById('btn-mute')?.textContent || '🔊').trim();
+          document.getElementById('v15-mute-icon').textContent = txt;
+        }, 50);
+      }
+    });
+  });
+
+  // Slot select sync
+  const v15Slot = document.getElementById('v15-slot');
+  const origSlot = document.getElementById('save-slot');
+  if (origSlot && v15Slot) {
+    v15Slot.value = origSlot.value;
+    v15Slot.addEventListener('change', () => { origSlot.value = v15Slot.value; origSlot.dispatchEvent(new Event('change')); });
+  }
+
+  // -- Advanced mode toggle --
+  const advToggle = document.getElementById('v15-adv-toggle');
+  const ADV_KEY = 'kauvi-advanced-mode';
+  function applyAdvanced(on) {
+    document.body.classList.toggle('simple-mode', !on);
+    advToggle.classList.toggle('on', on);
+  }
+  applyAdvanced(localStorage.getItem(ADV_KEY) === '1');
+  advToggle.addEventListener('click', () => {
+    const on = !advToggle.classList.contains('on');
+    localStorage.setItem(ADV_KEY, on ? '1' : '0');
+    applyAdvanced(on);
+  });
+
+  // Tag advanced features so simple-mode CSS hides them
+  const tagAdvanced = () => {
+    ['cx-group','cx-ungroup','cx-hole','cx-merge','cx-align-x','cx-align-y','cx-align-z','cx-snap','cx-mirror-y','cx-mirror-z'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('v15-advanced');
+    });
+    // Hide "Edit" tab edit-panel content like material library / print estimator in simple mode
+    ['print-est-wrap','material-lib-wrap','edit-panel'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('v15-advanced');
+    });
+  };
+  tagAdvanced();
+  setTimeout(tagAdvanced, 800); // catch late-mounted panels
+
+  // -- Bottom sheet + FAB --
+  const fab = document.createElement('button');
+  fab.id = 'v15-fab';
+  fab.title = 'Add shape, template, or color';
+  fab.innerHTML = '+';
+  document.body.appendChild(fab);
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'v15-backdrop';
+  document.body.appendChild(backdrop);
+
+  const sheet = document.createElement('div');
+  sheet.id = 'v15-sheet';
+  sheet.innerHTML = `
+    <div class="handle"></div>
+    <div class="tabs" role="tablist">
+      <button data-tab="shapes" class="active">Shapes</button>
+      <button data-tab="templates">Templates</button>
+      <button data-tab="colors">Colors</button>
+    </div>
+    <div class="panes">
+      <div class="pane active" data-pane="shapes">
+        <h4>Tap a shape to add it</h4>
+        <div id="v15-shapes-slot"></div>
+      </div>
+      <div class="pane" data-pane="templates">
+        <h4>Start from a template</h4>
+        <div id="v15-tmpl-slot"></div>
+      </div>
+      <div class="pane" data-pane="colors">
+        <h4>Tap to paint the selected shape</h4>
+        <div id="v15-colors-slot"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(sheet);
+
+  function openSheet() {
+    backdrop.classList.add('open');
+    sheet.classList.add('open');
+    fab.classList.add('expanded');
+    // Borrow palette/templates/chips from sidebar into sheet
+    mirrorIntoSheet();
+  }
+  function closeSheet() {
+    backdrop.classList.remove('open');
+    sheet.classList.remove('open');
+    fab.classList.remove('expanded');
+    setTimeout(returnFromSheet, 320); // return after transition
+  }
+  fab.addEventListener('click', () => sheet.classList.contains('open') ? closeSheet() : openSheet());
+  backdrop.addEventListener('click', closeSheet);
+
+  // Tab switcher in sheet
+  sheet.querySelectorAll('.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sheet.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      sheet.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.pane === btn.dataset.tab));
+    });
+  });
+
+  // Touch swipe-down to close
+  let touchStartY = 0;
+  sheet.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, {passive: true});
+  sheet.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - touchStartY;
+    if (dy > 70 && sheet.querySelector('.panes').scrollTop === 0) closeSheet();
+  }, {passive: true});
+
+  // Move palettes between sidebar (desktop) and sheet (mobile)
+  // We DON'T destroy the sidebar copies — we move the same DOM nodes
+  // so all wired event listeners stay live.
+  function mirrorIntoSheet() {
+    const moves = [
+      ['shape-palette', 'v15-shapes-slot'],
+      ['templates', 'v15-tmpl-slot'],
+      ['color-chips', 'v15-colors-slot'],
+    ];
+    moves.forEach(([from, to]) => {
+      const src = document.getElementById(from);
+      const tgt = document.getElementById(to);
+      if (src && tgt && src.parentElement !== tgt) tgt.appendChild(src);
+    });
+  }
+  function returnFromSheet() {
+    if (window.innerWidth > 760) {
+      // Desktop — return panels to sidebar tabs
+      const back = [
+        ['shape-palette', 'ls-shapes'],
+        ['templates', 'ls-tmpl'],
+        ['color-chips', 'ls-colors'],
+      ];
+      back.forEach(([from, to]) => {
+        const src = document.getElementById(from);
+        const tgt = document.getElementById(to);
+        if (src && tgt && src.parentElement !== tgt) tgt.appendChild(src);
+      });
+    }
+  }
+
+  // Auto-close sheet after picking a shape or template (kid-friendly: don't bury them in the sheet)
+  function wireAutoClose() {
+    const sp = document.getElementById('shape-palette');
+    const tp = document.getElementById('templates');
+    [sp, tp].forEach(container => {
+      if (!container || container.dataset.v15Closer) return;
+      container.dataset.v15Closer = '1';
+      container.addEventListener('click', e => {
+        if (e.target.closest('button') && sheet.classList.contains('open')) {
+          setTimeout(closeSheet, 180);
+        }
+      });
+    });
+  }
+  setTimeout(wireAutoClose, 500);
+  setInterval(wireAutoClose, 2000);
+
+  // Make ref-launcher visible on mobile (was display:none in v8)
+  const refLauncher = document.getElementById('ref-launcher');
+  if (refLauncher) refLauncher.style.display = '';
+
+  // Force three.js canvas resize on viewport change (the canvas was overflowing on iPhone)
+  window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 200));
+  // Initial nudge — give layout a beat to settle
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 600);
+
+  // Welcome-card spacing on mobile
+  const helpDialog = document.getElementById('help-dialog');
+  if (helpDialog) {
+    const styleFix = document.createElement('style');
+    styleFix.textContent = `@media (max-width: 760px) { #help-dialog .kid-modal-inner { max-width: calc(100vw - 24px) !important; max-height: calc(100vh - 80px) !important; overflow-y: auto; } }`;
+    document.head.appendChild(styleFix);
+  }
+})();
+
 </script>
 
 </body>
