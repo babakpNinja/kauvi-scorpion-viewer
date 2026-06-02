@@ -3547,6 +3547,325 @@ window.executeCommands = function(plan) {
   setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 0);
 })();
 
+
+// ============================================================
+// V12: split toolbar (header File-menu + contextual bottom bar) + smooth animations
+// ============================================================
+(function v12Toolbar() {
+  const header = document.querySelector('#app > header');
+  const app = document.getElementById('app');
+  if (!header || !app) return;
+
+  // -- CSS overlay: animations + new bars --
+  const css = document.createElement('style');
+  css.textContent = `
+    :root { --ease: cubic-bezier(0.4, 0, 0.2, 1); }
+    /* Smoother sidebar transitions */
+    #app { transition: grid-template-columns 320ms var(--ease); }
+    #lsb, #rsb { transition: opacity 240ms var(--ease), transform 280ms var(--ease); }
+    #app.lcol #lsb { opacity: 0; transform: translateX(-12px); pointer-events: none; }
+    #app.rcol #rsb { opacity: 0; transform: translateX(12px); pointer-events: none; }
+    #lcol, #rcol { transition: left 320ms var(--ease), right 320ms var(--ease); }
+    /* Tab cross-fade */
+    .v8sb .pane { transition: opacity 200ms ease-out; opacity: 0; }
+    .v8sb .pane.active { opacity: 1; }
+    /* Button press feedback */
+    .v8sb button, #toolbar button, #toolbar label, #hdr-bar button, #ctx-bar button { transition: transform 100ms var(--ease), background 150ms ease, border-color 150ms ease; }
+    .v8sb button:active, #toolbar button:active, #hdr-bar button:active, #ctx-bar button:active { transform: scale(0.96); }
+    /* Status banner smooth */
+    #status { transition: opacity 260ms ease, transform 260ms var(--ease); transform: translateX(-50%) translateY(8px); }
+    #status.show { transform: translateX(-50%) translateY(0); }
+
+    /* Hide old toolbar — replaced by header buttons + contextual bar */
+    #app > #toolbar { display: none !important; }
+
+    /* === Header redesign === */
+    #app > header {
+      display: flex !important;
+      align-items: center;
+      padding: 0 14px !important;
+      gap: 12px;
+      background: rgba(255,255,255,0.98) !important;
+      border-bottom: 1px solid #d6dbe1;
+      z-index: 12;
+    }
+    #app > header h1 {
+      color: #0b0d10 !important;
+      font-size: 14px !important;
+      font-weight: 700;
+      margin: 0;
+      flex: 0 0 auto;
+    }
+    #app > header h1 span {
+      background: linear-gradient(90deg, #7c5cff, #39e1c4);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    #app > header .badge {
+      font-size: 10px !important;
+      color: #6b7280 !important;
+      border: 1px solid #d6dbe1 !important;
+      padding: 3px 7px;
+      border-radius: 999px;
+    }
+    #hdr-bar {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    #hdr-bar button {
+      appearance: none;
+      background: transparent;
+      color: #0b0d10;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+    }
+    #hdr-bar button:hover { background: #eef2f5; border-color: #d6dbe1; }
+    #hdr-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #hdr-bar .hdr-sep { width: 1px; height: 22px; background: #d6dbe1; margin: 0 3px; }
+    #hdr-bar select {
+      background: white; border: 1px solid #d6dbe1; padding: 6px 8px; border-radius: 8px; font-size: 11px; cursor: pointer;
+    }
+    /* File menu dropdown */
+    .menu-host { position: relative; }
+    .menu-pop {
+      position: absolute; top: calc(100% + 4px); right: 0;
+      min-width: 200px;
+      background: white;
+      border: 1px solid #d6dbe1;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+      padding: 6px;
+      opacity: 0; transform: translateY(-6px); pointer-events: none;
+      transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+      z-index: 30;
+    }
+    .menu-pop.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .menu-pop button {
+      width: 100%;
+      text-align: left !important;
+      padding: 8px 10px !important;
+      font-size: 12px !important;
+      border-radius: 6px !important;
+      border: none !important;
+    }
+    .menu-pop button:hover { background: #eef2f5 !important; }
+    .menu-pop .menu-sep { height: 1px; background: #d6dbe1; margin: 4px 6px; }
+
+    /* === Bottom contextual bar === */
+    #ctx-bar {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      z-index: 11;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px;
+      background: rgba(255,255,255,0.98);
+      border: 1px solid #d6dbe1;
+      border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 220ms var(--ease), transform 260ms var(--ease);
+    }
+    #ctx-bar.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+    #ctx-bar button {
+      appearance: none;
+      background: transparent;
+      color: #0b0d10;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #ctx-bar button:hover { background: #eef2f5; border-color: #d6dbe1; }
+    #ctx-bar button.primary { background: rgba(124,92,255,0.08); color: #7c5cff; border-color: #7c5cff; }
+    #ctx-bar button.danger:hover { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+    #ctx-bar .ctx-sep { width: 1px; height: 22px; background: #d6dbe1; margin: 0 4px; }
+    #ctx-bar .ctx-group-label {
+      font-size: 9px; color: #9ca3af; text-transform: uppercase;
+      letter-spacing: 0.06em; padding: 0 4px; align-self: center;
+    }
+
+    /* Mobile-friendly header buttons */
+    @media (max-width: 760px) {
+      #app > header { padding: 0 6px !important; gap: 6px; }
+      #app > header h1 { font-size: 12px !important; }
+      #hdr-bar button { padding: 6px 7px !important; font-size: 11px !important; }
+      #hdr-bar button .label { display: none; }
+      #ctx-bar { bottom: 10px; padding: 4px; }
+      #ctx-bar button { padding: 6px 7px !important; font-size: 11px !important; }
+      #ctx-bar button .label { display: none; }
+      #ctx-bar .ctx-group-label { display: none; }
+    }
+  `;
+  document.head.appendChild(css);
+
+  // Helper: programmatically click a hidden original button
+  const fwd = (id) => () => { const el = document.getElementById(id); if (el) el.click(); };
+
+  // -- Build new header bar (right side of header) --
+  const hdr = document.createElement('div');
+  hdr.id = 'hdr-bar';
+  hdr.innerHTML = `
+    <button id="hb-undo" title="Undo (Cmd/Ctrl+Z)"><span>↶</span></button>
+    <button id="hb-redo" title="Redo (Cmd/Ctrl+Shift+Z)"><span>↷</span></button>
+    <span class="hdr-sep"></span>
+    <div class="menu-host">
+      <button id="hb-file" title="File menu">📁 <span class="label">File</span> ▾</button>
+      <div class="menu-pop" id="file-menu">
+        <button data-act="open">📁 Open STL file...</button>
+        <button data-act="download">⬇ Download model STL</button>
+        <button data-act="print-stl">🖨 Print full scene STL</button>
+        <div class="menu-sep"></div>
+        <button data-act="save">💾 Save to slot</button>
+        <button data-act="load">📂 Load from slot</button>
+        <button data-act="export-project">⬇ Download project (.kauvi.json)</button>
+        <div class="menu-sep"></div>
+        <button data-act="share">🔗 Get share link</button>
+      </div>
+    </div>
+    <select id="hb-slot" title="Save slot">
+      <option value="1">Slot 1</option>
+      <option value="2">Slot 2</option>
+      <option value="3">Slot 3</option>
+    </select>
+    <span class="hdr-sep"></span>
+    <button id="hb-mute" title="Mute / unmute sound effects">🔊</button>
+    <button id="hb-help" title="Quick start guide">❓</button>
+  `;
+  header.appendChild(hdr);
+
+  // Wire new header buttons → forward to existing handlers
+  document.getElementById('hb-undo').addEventListener('click', fwd('btn-undo'));
+  document.getElementById('hb-redo').addEventListener('click', fwd('btn-redo'));
+  document.getElementById('hb-help').addEventListener('click', fwd('btn-help'));
+  // Mute button — toggle from original then mirror text
+  const hbMute = document.getElementById('hb-mute');
+  hbMute.addEventListener('click', () => {
+    const orig = document.getElementById('btn-mute');
+    if (orig) orig.click();
+    setTimeout(() => { hbMute.textContent = (document.getElementById('btn-mute')?.textContent || '🔊').trim(); }, 50);
+  });
+  // Slot select mirror
+  const hbSlot = document.getElementById('hb-slot');
+  const origSlot = document.getElementById('save-slot');
+  if (origSlot) {
+    hbSlot.value = origSlot.value;
+    hbSlot.addEventListener('change', () => { origSlot.value = hbSlot.value; origSlot.dispatchEvent(new Event('change')); });
+  }
+  // Sync undo/redo enabled state from originals every 600ms
+  setInterval(() => {
+    const u = document.getElementById('btn-undo'); const r = document.getElementById('btn-redo');
+    document.getElementById('hb-undo').disabled = !!u?.disabled;
+    document.getElementById('hb-redo').disabled = !!r?.disabled;
+  }, 600);
+
+  // File menu dropdown
+  const fileBtn = document.getElementById('hb-file');
+  const fileMenu = document.getElementById('file-menu');
+  fileBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    fileMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => fileMenu.classList.remove('open'));
+  fileMenu.querySelectorAll('button[data-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fileMenu.classList.remove('open');
+      const act = btn.dataset.act;
+      if (act === 'open') document.getElementById('fileinput')?.click();
+      else if (act === 'download') fwd('btn-download')();
+      else if (act === 'print-stl') fwd('btn-export-stl')();
+      else if (act === 'save') fwd('btn-save')();
+      else if (act === 'load') fwd('btn-load')();
+      else if (act === 'export-project') fwd('btn-export-project')();
+      else if (act === 'share') fwd('btn-share')();
+    });
+  });
+
+  // -- Build new contextual bottom bar --
+  const ctx = document.createElement('div');
+  ctx.id = 'ctx-bar';
+  ctx.innerHTML = `
+    <span class="ctx-group-label">Mode</span>
+    <button id="cx-move" class="primary" title="Move (translate)">↔</button>
+    <button id="cx-rotate" title="Rotate">↻</button>
+    <button id="cx-scale" title="Scale">⤡</button>
+    <span class="ctx-sep"></span>
+    <span class="ctx-group-label">Edit</span>
+    <button id="cx-copy" title="Duplicate (D)">⎘ <span class="label">Copy</span></button>
+    <button id="cx-delete" class="danger" title="Delete (Del)">🗑 <span class="label">Delete</span></button>
+    <button id="cx-mirror-x" title="Mirror X">↔X</button>
+    <button id="cx-mirror-y" title="Mirror Y">↕Y</button>
+    <button id="cx-mirror-z" title="Mirror Z">⤧Z</button>
+    <span class="ctx-sep"></span>
+    <span class="ctx-group-label">Build</span>
+    <button id="cx-group" title="Group (Cmd+G)">🔗 <span class="label">Group</span></button>
+    <button id="cx-ungroup" title="Ungroup">✂</button>
+    <button id="cx-hole" title="Mark as Hole">🕳 <span class="label">Hole</span></button>
+    <button id="cx-merge" title="Merge (CSG)">🔨 <span class="label">Merge</span></button>
+    <span class="ctx-sep"></span>
+    <span class="ctx-group-label">Align</span>
+    <button id="cx-align-x" title="Align X">⫶X</button>
+    <button id="cx-align-y" title="Align Y">⫶Y</button>
+    <button id="cx-align-z" title="Align Z">⫶Z</button>
+    <button id="cx-snap" title="Snap to grid">⊞</button>
+  `;
+  document.getElementById('stage').appendChild(ctx);
+
+  // Wire contextual buttons → original handlers
+  const wireCtx = (newId, origId) => {
+    const el = document.getElementById(newId);
+    if (!el) return;
+    el.addEventListener('click', () => { document.getElementById(origId)?.click(); });
+  };
+  wireCtx('cx-copy', 'btn-duplicate');
+  wireCtx('cx-delete', 'btn-delete');
+  wireCtx('cx-mirror-x', 'btn-mirror-x');
+  wireCtx('cx-mirror-y', 'btn-mirror-y');
+  wireCtx('cx-mirror-z', 'btn-mirror-z');
+  wireCtx('cx-group', 'btn-group');
+  wireCtx('cx-ungroup', 'btn-ungroup');
+  wireCtx('cx-hole', 'btn-hole');
+  wireCtx('cx-merge', 'btn-merge');
+  wireCtx('cx-align-x', 'btn-align-x');
+  wireCtx('cx-align-y', 'btn-align-y');
+  wireCtx('cx-align-z', 'btn-align-z');
+  wireCtx('cx-snap', 'btn-snap');
+
+  // Gizmo mode toggles
+  const modeBtns = { move: document.getElementById('cx-move'), rotate: document.getElementById('cx-rotate'), scale: document.getElementById('cx-scale') };
+  function setGizmoMode(mode) {
+    try { transformControls.setMode(mode === 'move' ? 'translate' : mode); } catch(e) {}
+    Object.entries(modeBtns).forEach(([k, b]) => b?.classList.toggle('primary', k === mode));
+  }
+  modeBtns.move?.addEventListener('click', () => setGizmoMode('move'));
+  modeBtns.rotate?.addEventListener('click', () => setGizmoMode('rotate'));
+  modeBtns.scale?.addEventListener('click', () => setGizmoMode('scale'));
+
+  // Mirror Snap button to reflect primary state when toggled
+  const cxSnap = document.getElementById('cx-snap');
+  setInterval(() => { cxSnap?.classList.toggle('primary', !!document.getElementById('btn-snap')?.classList.contains('primary')); }, 600);
+
+  // Show ctx-bar only when a non-master object is selected (or mesh is selected)
+  function refreshCtxVisibility() {
+    const hasSel = (selectedObjects && selectedObjects.length > 0) || !!transformControls.object;
+    ctx.classList.toggle('show', hasSel);
+  }
+  setInterval(refreshCtxVisibility, 400);
+  transformControls.addEventListener('objectChange', refreshCtxVisibility);
+  refreshCtxVisibility();
+})();
+
 </script>
 
 </body>
