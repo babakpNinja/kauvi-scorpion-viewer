@@ -2964,7 +2964,16 @@ function buildPrintEstimatorUI() {
   `;
   document.head.appendChild(style);
 }
-buildPrintEstimatorUI();
+// Inject estimator once the v8 layout has wired up #rs-edit. Try a few times.
+let _peTries = 0;
+function tryBuildEstimator() {
+  if (document.getElementById('print-est')) return;
+  buildPrintEstimatorUI();
+  if (document.getElementById('print-est')) return;
+  if (++_peTries < 20) setTimeout(tryBuildEstimator, 200);
+}
+tryBuildEstimator();
+window.addEventListener('load', tryBuildEstimator);
 
 function refreshPrintEstimate() {
   if (!document.getElementById('pe-vol')) return;
