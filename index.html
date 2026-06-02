@@ -3548,6 +3548,99 @@ window.executeCommands = function(plan) {
 })();
 
 
+// === V12.1: Fix color chip layout (some were rendered off-left) + add 10 vibrant colors ===
+(function fixColorChips() {
+  function applyFix() {
+    const wrap = document.getElementById('color-chips');
+    if (!wrap) return false;
+    // Strong CSS reset for the container + buttons
+    Object.assign(wrap.style, {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(5, 1fr)',
+      gap: '6px',
+      width: '100%',
+      maxWidth: '100%',
+      margin: '0',
+      padding: '0',
+      position: 'static',
+      left: 'auto', right: 'auto', top: 'auto', bottom: 'auto',
+      boxSizing: 'border-box',
+    });
+    // Ensure every chip is square + visible
+    wrap.querySelectorAll('button').forEach(b => {
+      Object.assign(b.style, {
+        width: '100%',
+        aspectRatio: '1 / 1',
+        height: 'auto',
+        minHeight: '28px',
+        padding: '0',
+        borderRadius: '50%',
+        border: '1.5px solid rgba(0,0,0,0.08)',
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.08)',
+        position: 'static',
+        margin: '0',
+        cursor: 'pointer',
+      });
+    });
+    // If we haven't already added the new vibrant colors, do it
+    if (!wrap.dataset.v12new) {
+      wrap.dataset.v12new = '1';
+      const newColors = [
+        '#00ffff', // cyan
+        '#ff00ff', // magenta
+        '#84ff00', // chartreuse/lime
+        '#ff1493', // deep pink / hot pink
+        '#1e90ff', // dodger blue / electric blue
+        '#ff4500', // orange red
+        '#7fffd4', // aquamarine / mint
+        '#ffd700', // gold
+        '#dc143c', // crimson
+        '#8a2be2', // blue violet
+      ];
+      newColors.forEach(c => {
+        const b = document.createElement('button');
+        b.dataset.c = c;
+        b.style.background = c;
+        b.title = 'Color ' + c;
+        Object.assign(b.style, {
+          width: '100%',
+          aspectRatio: '1 / 1',
+          height: 'auto',
+          minHeight: '28px',
+          padding: '0',
+          borderRadius: '50%',
+          border: '1.5px solid rgba(0,0,0,0.08)',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.08)',
+          cursor: 'pointer',
+        });
+        b.addEventListener('click', () => {
+          const target = (selectedObjects && selectedObjects[0]) || mesh;
+          if (target && target.material) {
+            target.material.color = new THREE.Color(c);
+            setStatus('Color: ' + c, 800);
+            pushHistory('Pick color ' + c);
+            beepClick && beepClick();
+          }
+        });
+        wrap.appendChild(b);
+      });
+    }
+    return true;
+  }
+  let tries = 0;
+  function retry() {
+    if (applyFix()) return;
+    if (++tries < 30) setTimeout(retry, 200);
+  }
+  retry();
+  window.addEventListener('load', applyFix);
+  // Re-apply after any sidebar tab switch (in case CSS gets recomputed weird)
+  document.addEventListener('click', e => {
+    if (e.target && e.target.matches('.v8sb .tabs button')) setTimeout(applyFix, 200);
+  });
+})();
+
+
 // ============================================================
 // V12: split toolbar (header File-menu + contextual bottom bar) + smooth animations
 // ============================================================
