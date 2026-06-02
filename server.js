@@ -177,6 +177,87 @@ app.post('/api/image', async (req, res) => {
   }
 });
 
+// === Share link: persistent scene store with short ID ===
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+const SHARES_PATH = '/tmp/kauvi-shares.json';
+const MAX_SHARES = 200;
+const SHARE_MAX_BYTES = 500_000;
+const shares = new Map();
+try {
+  if (existsSync(SHARES_PATH)) {
+    const raw = JSON.parse(readFileSync(SHARES_PATH, 'utf8'));
+    for (const [id, scene] of Object.entries(raw)) shares.set(id, scene);
+    console.log('loaded', shares.size, 'shares from disk');
+  }
+} catch (e) { console.warn('share load failed', e.message); }
+function persistShares() {
+  try {
+    const obj = Object.fromEntries(shares.entries());
+    writeFileSync(SHARES_PATH, JSON.stringify(obj));
+  } catch (e) { console.warn('share persist failed', e.message); }
+}
+function randomShareId(len = 6) {
+  const alpha = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  for (let i = 0; i < len; i++) s += alpha[Math.floor(Math.random() * alpha.length)];
+  return s;
+}
+
+app.post('/api/share', (req, res) => {
+  const scene = req.body?.scene;
+  if (!scene || typeof scene !== 'object') return res.status(400).json({ ok: false, error: 'scene object required' });
+  const json = JSON.stringify(scene);
+  if (json.length > SHARE_MAX_BYTES) return res.status(413).json({ ok: false, error: 'scene too large (max 500KB)' });
+  let id;
+  for (let i = 0; i < 6; i++) { id = randomShareId(); if (!shares.has(id)) break; }
+  shares.set(id, scene);
+  // LRU evict: oldest first
+  while (shares.size > MAX_SHARES) {
+    const oldestKey = shares.keys().next().value;
+    if (oldestKey !== undefined) shares.delete(oldestKey); else break;
+  }
+  persistShares();
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host = req.headers.host || req.get?.('host') || 'viewer-production-e90c.up.railway.app';
+  const url = proto + '://' + host + '/share/' + id;
+  res.json({ ok: true, id, url });
+});
+
+app.get('/api/share/:id', (req, res) => {
+  const scene = shares.get(req.params.id);
+  if (!scene) return res.status(404).json({ ok: false, error: 'not found' });
+  res.json({ ok: true, scene });
+});
+
+app.get('/share/:id', async (req, res, next) => {
+  try {
+    const id = req.params.id.replace(/[^a-z0-9]/gi, '').slice(0, 8);
+    if (!id || !shares.has(id)) return next();
+    let html = await readFile(path.join(__dirname, 'index.html'), 'utf8');
+    const inject = `
+<script id="share-bootstrap">
+(function(){
+  function tryApply() {
+    if (typeof window._applyShareSnapshot === 'function') {
+      fetch('/api/share/${id}').then(r => r.json()).then(data => {
+        if (data.ok && data.scene) window._applyShareSnapshot(data.scene);
+      });
+      return true;
+    }
+    return false;
+  }
+  if (!tryApply()) {
+    const iv = setInterval(() => { if (tryApply()) clearInterval(iv); }, 300);
+    setTimeout(() => clearInterval(iv), 15000);
+  }
+})();
+</script>`;
+    html = html.replace('</body>', inject + '\n</body>');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (e) { next(); }
+});
+
 // SPA fallback to index.html
 app.get('*', async (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();

@@ -884,6 +884,7 @@
       <button id="btn-save" title="Save project to this slot">💾</button>
       <button id="btn-load" title="Load this slot">📂</button>
       <button id="btn-export-project" title="Download as .kauvi.json">⬇</button>
+      <button id="btn-share" title="Get a sharable link to this scene">🔗</button>
       <span class="tb-sep"></span>
       <button id="btn-mute" title="Mute / unmute sound effects">🔊</button>
       <button id="btn-help" title="Quick start guide">❓</button>
@@ -2990,6 +2991,120 @@ function refreshPrintEstimate() {
 setInterval(refreshPrintEstimate, 1500);
 transformControls.addEventListener('objectChange', refreshPrintEstimate);
 refreshPrintEstimate();
+
+
+// === V11: SHARE LINK ===
+window._applyShareSnapshot = function(snap) {
+  try { applySnapshot(snap); setStatus('Loaded shared project! 🔗', 2000); pushHistory('Loaded share'); } catch(e) { console.warn('share apply', e); }
+};
+const btnShare = document.getElementById('btn-share');
+if (btnShare) btnShare.addEventListener('click', async () => {
+  try {
+    const scene = serializeScene();
+    btnShare.disabled = true;
+    setStatus('Making share link...', 8000);
+    const resp = await fetch('/api/share', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scene })
+    });
+    const data = await resp.json();
+    if (!data.ok) { setStatus('Share failed: ' + (data.error || 'unknown'), 2500); return; }
+    try { await navigator.clipboard.writeText(data.url); } catch(e) {}
+    setStatus('Link copied! ' + data.url, 4500);
+    pushHistory('Made share ' + data.id);
+    beepSave();
+  } catch (e) {
+    setStatus('Share error: ' + e.message, 2500);
+  } finally {
+    btnShare.disabled = false;
+  }
+});
+
+
+// === V11: MATERIAL LIBRARY ===
+const MATERIALS = {
+  Plastic: { color: null, metalness: 0.0, roughness: 0.55, emissive: 0x000000, emissiveIntensity: 0 },
+  Wood:    { color: 0x8b5a2b, metalness: 0.0, roughness: 0.85, emissive: 0x0a0500, emissiveIntensity: 0.05 },
+  Gold:    { color: 0xffd700, metalness: 1.0, roughness: 0.25, emissive: 0x000000, emissiveIntensity: 0 },
+  Chrome:  { color: 0xcccccc, metalness: 1.0, roughness: 0.10, emissive: 0x000000, emissiveIntensity: 0 },
+  Glass:   { color: 0xa8d8ff, metalness: 0.05, roughness: 0.05, emissive: 0x000000, emissiveIntensity: 0, transparent: true, opacity: 0.45 },
+  Rainbow: { rainbow: true },
+};
+function applyMaterialPreset(name) {
+  const spec = MATERIALS[name];
+  if (!spec) return;
+  const target = (selectedObjects && selectedObjects[0]) || mesh;
+  if (!target || !target.material) { setStatus('Pick a shape first', 1500); return; }
+  if (spec.rainbow) {
+    const h = Math.random();
+    const c = new THREE.Color().setHSL(h, 0.8, 0.6);
+    target.material.color = c;
+    target.material.metalness = 0.3;
+    target.material.roughness = 0.4;
+    target.material.emissive = c.clone().multiplyScalar(0.2);
+    target.material.emissiveIntensity = 0.8;
+    target.material.transparent = false; target.material.opacity = 1;
+  } else {
+    if (spec.color !== null) target.material.color = new THREE.Color(spec.color);
+    target.material.metalness = spec.metalness;
+    target.material.roughness = spec.roughness;
+    target.material.emissive = new THREE.Color(spec.emissive);
+    target.material.emissiveIntensity = spec.emissiveIntensity;
+    target.material.transparent = !!spec.transparent;
+    target.material.opacity = spec.opacity ?? 1;
+  }
+  target.material.needsUpdate = true;
+  setStatus(name + ' material applied 🎨', 1400);
+  beepClick();
+  pushHistory('Material: ' + name);
+}
+function buildMaterialLibraryUI() {
+  if (document.getElementById('mat-lib')) return;
+  const target = document.getElementById('rs-edit') || document.getElementById('pane-properties');
+  if (!target) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'mat-lib-wrap';
+  const swatchHex = { Plastic: '#9aa4af', Wood: '#8b5a2b', Gold: '#ffd700', Chrome: '#cccccc', Glass: '#a8d8ff', Rainbow: 'conic-gradient(from 0deg, #ff5555, #ffaa00, #ffff00, #55ff55, #5555ff, #aa00ff, #ff5555)' };
+  const buttons = Object.keys(MATERIALS).map(name => {
+    const sw = swatchHex[name];
+    const style = sw.startsWith('conic') ? `background:${sw}` : `background:${sw}`;
+    return `<button data-mat="${name}" title="Apply ${name}"><span class="mat-sw" style="${style}"></span>${name}</button>`;
+  }).join('');
+  wrap.innerHTML = `
+    <h4 style="margin:4px 0 8px 0; font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:#6b7280; font-weight:700;">🎨 Material Library</h4>
+    <div id="mat-lib">${buttons}</div>
+    <div style="border-bottom:1px dashed #d6dbe1; margin:10px 0;"></div>
+  `;
+  const printEst = document.getElementById('print-est-wrap');
+  if (printEst && printEst.nextSibling) target.insertBefore(wrap, printEst.nextSibling);
+  else target.insertBefore(wrap, target.firstChild);
+  const css = document.createElement('style');
+  css.textContent = `
+    #mat-lib { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+    #mat-lib button {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 6px 4px; background: white; border: 1px solid #d6dbe1; border-radius: 8px;
+      font-size: 10px; color: #0b0d10; cursor: pointer;
+      transition: background 100ms, transform 80ms;
+    }
+    #mat-lib button:hover { background: #eef2f5; transform: translateY(-1px); border-color: #7c5cff; }
+    #mat-lib .mat-sw { display: block; width: 24px; height: 24px; border-radius: 50%; border: 1px solid #d6dbe1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); }
+  `;
+  document.head.appendChild(css);
+  wrap.querySelectorAll('button[data-mat]').forEach(b => {
+    b.addEventListener('click', () => applyMaterialPreset(b.dataset.mat));
+  });
+}
+let _mlTries = 0;
+function tryBuildMaterialLib() {
+  if (document.getElementById('mat-lib')) return;
+  buildMaterialLibraryUI();
+  if (document.getElementById('mat-lib')) return;
+  if (++_mlTries < 20) setTimeout(tryBuildMaterialLib, 200);
+}
+tryBuildMaterialLib();
+window.addEventListener('load', tryBuildMaterialLib);
 
 
 // === V6: REFERENCE IMAGE PANEL (DALL-E 3 via /api/image) ===
